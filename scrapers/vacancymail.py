@@ -8,9 +8,26 @@ URL patterns:
   Category page:  /categories/ict-computer-jobs-in-zimbabwe/?page=2
   Job detail:     /jobs/some-job-title-12345/
 
-HTML structure (confirmed from live site):
-  Each listing is an <a> tag containing all job info as inline text.
-  Format: "CompanyTitle ... Location - Expires DATE - Job Type - Posted AGO"
+HTML structure (confirmed from live site inspection):
+  Each listing is:  <a class="job-listing" href="/jobs/slug/">
+    <div class="job-listing-details">
+      <div class="job-listing-company-logo"><img alt="CompanyName"></div>
+      <div class="job-listing-description">
+        <h3 class="job-listing-title">Title</h3>
+        <h4 class="job-listing-company">Company</h4>
+        <p class="job-listing-text">Snippet...</p>
+      </div>
+    </div>
+    <div class="job-listing-footer">
+      <ul>
+        <li>Location</li>
+        <li>Expires DATE</li>
+        <li>Full Time</li>
+        <li>TBA</li>
+        <li>Posted X days</li>
+      </ul>
+    </div>
+  </a>
 """
 
 import httpx
@@ -85,60 +102,54 @@ def _get_page(client: httpx.Client, url: str) -> Optional[BeautifulSoup]:
 
 def _parse_listing_card(anchor: BeautifulSoup) -> Optional[JobListing]:
     """
-    Parse a single job listing <a> tag.
+    Parse a single <a class="job-listing"> element.
 
-    The anchor text looks like:
-      "CompanyTitle snippet... - Location - Expires DD Mon YYYY - Full Time - Posted X days"
-
-    We split on ' - ' to extract fields positionally from the end,
-    since the title+snippet at the start may contain ' - ' too.
+    Structure confirmed from live HTML:
+      - Title:    h3.job-listing-title
+      - Company:  h4.job-listing-company  (also in img[alt] as fallback)
+      - Snippet:  p.job-listing-text
+      - Footer:   div.job-listing-footer ul > li  (location, expires, type, salary, posted)
     """
     try:
         href = anchor.get("href", "")
-        url = f"{BASE_URL}{href}" if href.startswith("/") else href
         if not href or "/jobs/" not in href:
             return None
+        url = f"{BASE_URL}{href}" if href.startswith("/") else href
 
-        # Raw text — strip and collapse whitespace
-        raw = " ".join(anchor.get_text(separator=" ").split())
-
-        # Split on ' - ' — fields are at the END, company+title+snippet at the start
-        parts = [p.strip() for p in raw.split(" - ")]
-
-        # From the end: "Posted X", "Full Time" / "Part Time", "Expires DATE", "Location"
-        # Everything before location is company + title + snippet
-        if len(parts) < 4:
+        # Title
+        title_el = anchor.select_one("h3.job-listing-title")
+        title = title_el.get_text(strip=True) if title_el else ""
+        if not title:
             return None
 
-        date_posted = parts[-1]   # e.g. "Posted 6 days"
-        job_type    = parts[-2]   # e.g. "Full Time"
-        expires     = parts[-3]   # e.g. "Expires 30 Jun 2026"
-        location    = parts[-4]   # e.g. "Harare"
-        prefix      = " - ".join(parts[:-4])  # "Company Title snippet..."
-
-        # Separate company from title — company is in <strong> or bold inside anchor
-        company_el = anchor.select_one("strong, b, .company")
+        # Company — prefer h4, fall back to logo img alt text
+        company_el = anchor.select_one("h4.job-listing-company")
         if company_el:
             company = company_el.get_text(strip=True)
-            title = prefix.replace(company, "").strip(" -")
         else:
-            # Fallback: first word-group before the title is often the company
-            # Use the page's text pattern: company name appears at start
-            words = prefix.split()
-            company = words[0] if words else "Unknown"
-            title = " ".join(words[1:]) if len(words) > 1 else prefix
+            logo_img = anchor.select_one(".job-listing-company-logo img")
+            company = logo_img.get("alt", "Unknown") if logo_img else "Unknown"
 
-        # Clean up "TBA" job_type noise seen in some listings
+        # Footer <li> items — order: location, expires, job_type, salary, date_posted
+        footer_items = anchor.select("div.job-listing-footer li")
+        texts = [li.get_text(strip=True) for li in footer_items]
+
+        location   = texts[0] if len(texts) > 0 else ""
+        expires    = texts[1].replace("Expires", "").strip() if len(texts) > 1 else ""
+        job_type   = texts[2] if len(texts) > 2 else None
+        date_posted = texts[4].replace("Posted", "").strip() if len(texts) > 4 else ""
+
+        # "TBA" salary in slot 3 — ignore it. Clean up job_type if it ended up as TBA
         if job_type == "TBA":
             job_type = None
 
         return JobListing(
-            title=title.strip(),
-            company=company.strip(),
-            location=location.strip(),
-            expires=expires.replace("Expires", "").strip(),
+            title=title,
+            company=company,
+            location=location,
+            expires=expires,
             job_type=job_type,
-            date_posted=date_posted.replace("Posted", "").strip(),
+            date_posted=date_posted,
             url=url,
         )
 
@@ -148,14 +159,14 @@ def _parse_listing_card(anchor: BeautifulSoup) -> Optional[JobListing]:
 
 
 def _parse_category_page(soup: BeautifulSoup) -> list[JobListing]:
-    """Extract all job listings from a category/search results page."""
+    """Extract all job listings from a category page."""
     listings = []
 
-    # Each listing is an <a> tag whose href starts with /jobs/
-    job_anchors = soup.select('a[href^="/jobs/"]')
+    # Confirmed selector from live HTML: <a class="job-listing" href="/jobs/...">
+    job_anchors = soup.select("a.job-listing")
 
     if not job_anchors:
-        logger.warning("No job anchors found — page structure may have changed")
+        logger.warning("No job cards found — selector 'a.job-listing' matched nothing")
         return listings
 
     for anchor in job_anchors:
