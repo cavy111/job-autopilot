@@ -1,0 +1,8 @@
+httpx
+beautifulsoup4
+pdfplumber
+openai
+fastapi
+uvicorn
+jinja2
+python-dotenv
