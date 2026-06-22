@@ -21,6 +21,7 @@ from email.mime.base import MIMEBase
 from email import encoders
 from pathlib import Path
 from datetime import datetime, timedelta
+from typing import Optional
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -222,8 +223,6 @@ def send_application(
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    from typing import Optional
-
     cv_profile = {
         "name":  "Dube Calvin",
         "email": "REDACTED@example.com",
@@ -246,5 +245,5 @@ if __name__ == "__main__":
         cover_letter_path="output/cover_letters/CoverLetter_example.docx",
         contact_email="REDACTED@example.com",  # send to yourself for testing
         subject="Application for Regulatory Technology Systems Developers — Dube Calvin",
-        dry_run=True,
+        dry_run=False,
     )
