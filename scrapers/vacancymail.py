@@ -201,10 +201,20 @@ def _fetch_job_detail(client: httpx.Client, job: JobListing) -> JobListing:
     if desc_el:
         job.description = desc_el.get_text(separator="\n", strip=True)
 
-    # Contact email — mailto links
+    # Contact email — try mailto links first, then regex scan full page text
+    import re
     email_el = soup.select_one('a[href^="mailto:"]')
     if email_el:
         job.contact_email = email_el["href"].replace("mailto:", "").strip()
+    else:
+        full_text = soup.get_text()
+        email_pattern = r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}'
+        emails = re.findall(email_pattern, full_text)
+        exclude = {"noreply", "example", "vacancymail"}
+        for email in emails:
+            if not any(x in email.lower() for x in exclude):
+                job.contact_email = email
+                break
 
     # How to apply — look for "apply" keyword in paragraphs
     for p in soup.find_all("p"):
