@@ -72,7 +72,7 @@ job-autopilot/
 
 ### Prerequisites
 - Python 3.10+
-- A Qwen Cloud API key — [get one here](https://www.alibabacloud.com/product/dashscope)
+- A Qwen Cloud API key — [get one here](https://home.qwencloud.com/api-keys)
 - A Google Cloud project with Gmail API enabled — [setup guide](#gmail-api-setup)
 
 ### Installation
