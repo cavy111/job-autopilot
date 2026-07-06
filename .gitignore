@@ -10,3 +10,8 @@ Calvin_Dube_CV_Gateway.docx
 credentials.json
 token.json
 venv/
+active_cv.txt
+*.db-shm
+*.db-wal
+uploads/
+output/
