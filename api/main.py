@@ -3,14 +3,15 @@ api/main.py — FastAPI Dashboard
 """
 
 from fastapi import FastAPI, Request, Form, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
-import sys, os, shutil
+import sys, shutil
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from agents.tracker import init_db, get_all, get_stats, update_status
+from agents.status import read_status, reset_status
 
 app = FastAPI(title="Job Application Autopilot")
 templates = Jinja2Templates(directory="api/templates")
@@ -55,6 +56,12 @@ async def dashboard(request: Request):
     )
 
 
+@app.get("/pipeline-status")
+async def pipeline_status():
+    """Polled by the dashboard's JS every couple seconds."""
+    return JSONResponse(read_status())
+
+
 @app.post("/upload-cv")
 async def upload_cv(cv_file: UploadFile = File(...)):
     suffix = Path(cv_file.filename).suffix.lower()
@@ -76,6 +83,7 @@ async def update(job_url: str = Form(...), status: str = Form(...)):
 @app.post("/run-pipeline")
 async def run_pipeline():
     import subprocess
+    reset_status()
     cv = get_active_cv()
     cmd = [sys.executable, "main.py"]
     if cv:

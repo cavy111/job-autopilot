@@ -230,6 +230,7 @@ def scrape(
     categories: list[str] = ("ict",),
     max_pages: int = 3,
     fetch_details: bool = True,
+    skip_urls: set = None,
 ) -> list[JobListing]:
     """
     Main entry point. Scrape vacancymail.co.zw for the given categories.
@@ -279,6 +280,15 @@ def scrape(
 
                 time.sleep(REQUEST_DELAY)
 
+        # Skip already-tracked jobs entirely — no point re-fetching their details
+        if skip_urls:
+            before = len(all_listings)
+            all_listings = {
+                url: job for url, job in all_listings.items()
+                if url not in skip_urls
+            }
+            logger.info(f"Skipping {before - len(all_listings)} already-tracked listings (saved detail fetches)")
+        
         if fetch_details:
             total = len(all_listings)
             logger.info(f"Fetching details for {total} listings...")

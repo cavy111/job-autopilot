@@ -18,7 +18,6 @@
 
     main { max-width: 1100px; margin: 0 auto; padding: 28px 20px; }
 
-    /* Stats */
     .stats {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -36,7 +35,6 @@
     .stat-number { font-size: 2rem; font-weight: 700; color: #1A5276; }
     .stat-label  { font-size: 0.78rem; color: #666; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
 
-    /* CV Upload card */
     .cv-card {
       background: white; border-radius: 10px; padding: 20px 24px;
       box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 20px;
@@ -44,7 +42,6 @@
     }
     .cv-card-left { flex: 1; min-width: 200px; }
     .cv-card-left h3 { font-size: 0.95rem; color: #1A5276; margin-bottom: 4px; }
-    .cv-card-left p  { font-size: 0.82rem; color: #666; }
     .cv-active { color: #198754; font-weight: 600; font-size: 0.85rem; margin-top: 4px; }
     .cv-missing { color: #dc3545; font-weight: 600; font-size: 0.85rem; margin-top: 4px; }
 
@@ -56,10 +53,30 @@
     }
     .file-input:hover { background: #eaf0f7; }
 
-    /* Actions */
+    /* Live pipeline status card */
+    .pipeline-status-card {
+      background: white; border-radius: 10px; padding: 18px 24px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 20px;
+      display: none; /* shown via JS when a run is active or just finished */
+    }
+    .ps-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .spinner {
+      width: 16px; height: 16px; border: 3px solid #dbe7f0;
+      border-top-color: #1A5276; border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .ps-title { font-weight: 700; color: #1A5276; font-size: 0.95rem; }
+    .ps-message { font-size: 0.85rem; color: #555; margin-bottom: 10px; }
+    .ps-bar-track { height: 8px; background: #e9ecef; border-radius: 4px; overflow: hidden; }
+    .ps-bar-fill { height: 100%; background: #1A5276; transition: width 0.4s ease; width: 0%; }
+    .ps-bar-fill.done  { background: #198754; }
+    .ps-bar-fill.error { background: #dc3545; }
+    .ps-icon-done  { color: #198754; font-weight: 700; }
+    .ps-icon-error { color: #dc3545; font-weight: 700; }
+
     .actions { display: flex; gap: 12px; margin-bottom: 22px; align-items: center; flex-wrap: wrap; }
 
-    /* Buttons */
     .btn {
       padding: 9px 20px; border: none; border-radius: 6px;
       font-size: 0.9rem; cursor: pointer; font-family: Arial, sans-serif;
@@ -71,7 +88,6 @@
     .btn-sm { padding: 4px 10px; font-size: 0.78rem; font-weight: 500; }
     .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-    /* Table */
     .table-wrap {
       background: white; border-radius: 10px;
       box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow: hidden;
@@ -115,37 +131,16 @@
 <main>
 
   {% if not active_cv %}
-  <div class="notice">
-    ⚠️ No CV uploaded yet. Upload your CV below before running the pipeline.
-  </div>
+  <div class="notice">⚠️ No CV uploaded yet. Upload your CV below before running the pipeline.</div>
   {% endif %}
 
-  <!-- Stats -->
   <div class="stats">
-    <div class="stat-card">
-      <div class="stat-number">{{ stats.get('total', 0) }}</div>
-      <div class="stat-label">Total Tracked</div>
-    </div>
-    <div class="stat-card sent">
-      <div class="stat-number">{{ stats.get('sent', 0) }}</div>
-      <div class="stat-label">Sent</div>
-    </div>
-    <div class="stat-card interview">
-      <div class="stat-number">{{ stats.get('interview', 0) }}</div>
-      <div class="stat-label">Interviews</div>
-    </div>
-    <div class="stat-card review">
-      <div class="stat-number">{{ stats.get('pending', 0) }}</div>
-      <div class="stat-label">Pending</div>
-    </div>
-    <div class="stat-card rejected">
-      <div class="stat-number">{{ stats.get('rejected', 0) }}</div>
-      <div class="stat-label">Rejected</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-number">{{ stats.get('followed_up', 0) }}</div>
-      <div class="stat-label">Followed Up</div>
-    </div>
+    <div class="stat-card"><div class="stat-number">{{ stats.get('total', 0) }}</div><div class="stat-label">Total Tracked</div></div>
+    <div class="stat-card sent"><div class="stat-number">{{ stats.get('sent', 0) }}</div><div class="stat-label">Sent</div></div>
+    <div class="stat-card interview"><div class="stat-number">{{ stats.get('interview', 0) }}</div><div class="stat-label">Interviews</div></div>
+    <div class="stat-card review"><div class="stat-number">{{ stats.get('pending', 0) }}</div><div class="stat-label">Pending</div></div>
+    <div class="stat-card rejected"><div class="stat-number">{{ stats.get('rejected', 0) }}</div><div class="stat-label">Rejected</div></div>
+    <div class="stat-card"><div class="stat-number">{{ stats.get('followed_up', 0) }}</div><div class="stat-label">Followed Up</div></div>
   </div>
 
   <!-- CV Upload -->
@@ -165,10 +160,21 @@
     </form>
   </div>
 
+  <!-- Live pipeline status -->
+  <div class="pipeline-status-card" id="pipelineStatusCard">
+    <div class="ps-header">
+      <div class="spinner" id="psSpinner"></div>
+      <span id="psIcon" style="display:none;"></span>
+      <span class="ps-title" id="psTitle">Running pipeline…</span>
+    </div>
+    <div class="ps-message" id="psMessage"></div>
+    <div class="ps-bar-track"><div class="ps-bar-fill" id="psBarFill"></div></div>
+  </div>
+
   <!-- Actions -->
   <div class="actions">
-    <form method="post" action="/run-pipeline">
-      <button class="btn btn-primary" type="submit" {% if not active_cv %}disabled title="Upload a CV first"{% endif %}>
+    <form method="post" action="/run-pipeline" id="runPipelineForm">
+      <button class="btn btn-primary" type="submit" id="runPipelineBtn" {% if not active_cv %}disabled title="Upload a CV first"{% endif %}>
         ▶ Run Pipeline Now
       </button>
     </form>
@@ -183,42 +189,27 @@
     <table>
       <thead>
         <tr>
-          <th>Role</th>
-          <th>Company</th>
-          <th>Score</th>
-          <th>Status</th>
-          <th>Expires</th>
-          <th>Sent</th>
-          <th>Update</th>
+          <th>Role</th><th>Company</th><th>Score</th><th>Status</th><th>Expires</th><th>Sent</th><th>Update</th>
         </tr>
       </thead>
       <tbody>
         {% for app in apps %}
         <tr>
           <td>
-            <a href="{{ app.job_url }}" target="_blank"
-               style="color:#1A5276; text-decoration:none; font-weight:600;">
+            <a href="{{ app.job_url }}" target="_blank" style="color:#1A5276; text-decoration:none; font-weight:600;">
               {{ app.job_title[:45] }}{% if app.job_title|length > 45 %}…{% endif %}
             </a>
           </td>
           <td style="color:#555;">{{ app.company }}</td>
           <td>
             <div class="score-wrap">
-              <div class="score-bar">
-                <div class="score-fill" style="width:{{ app.relevance_score }}%"></div>
-              </div>
+              <div class="score-bar"><div class="score-fill" style="width:{{ app.relevance_score }}%"></div></div>
               <span class="score-text">{{ app.relevance_score }}</span>
             </div>
           </td>
-          <td>
-            <span class="badge" style="background:{{ app.status_color }}">
-              {{ app.status }}
-            </span>
-          </td>
+          <td><span class="badge" style="background:{{ app.status_color }}">{{ app.status }}</span></td>
           <td style="color:#888; font-size:0.82rem;">{{ app.expires or '—' }}</td>
-          <td style="color:#888; font-size:0.82rem;">
-            {{ app.sent_at[:10] if app.sent_at else '—' }}
-          </td>
+          <td style="color:#888; font-size:0.82rem;">{{ app.sent_at[:10] if app.sent_at else '—' }}</td>
           <td>
             <form method="post" action="/update-status" class="update-form">
               <input type="hidden" name="job_url" value="{{ app.job_url }}">
@@ -245,5 +236,83 @@
 </main>
 
 <footer>Job Application Autopilot · Built with Python, Qwen Cloud &amp; FastAPI</footer>
+
+<script>
+const STEP_LABELS = {
+  idle:       "Idle",
+  loading_cv: "Loading CV",
+  scraping:   "Scraping job listings",
+  filtering:  "Filtering new jobs",
+  scoring:    "Scoring jobs against your CV",
+  applying:   "Generating & sending applications",
+  followups:  "Checking follow-ups",
+  done:       "Pipeline complete",
+  error:      "Pipeline error",
+};
+
+const card    = document.getElementById('pipelineStatusCard');
+const spinner = document.getElementById('psSpinner');
+const icon    = document.getElementById('psIcon');
+const title   = document.getElementById('psTitle');
+const message = document.getElementById('psMessage');
+const barFill = document.getElementById('psBarFill');
+const runBtn  = document.getElementById('runPipelineBtn');
+
+let lastStep = null;
+let pollTimer = null;
+
+function renderStatus(data) {
+  if (data.step === 'idle') {
+    card.style.display = 'none';
+    return;
+  }
+
+  card.style.display = 'block';
+  title.textContent = STEP_LABELS[data.step] || data.step;
+  message.textContent = data.message || '';
+  barFill.style.width = (data.progress || 0) + '%';
+  barFill.classList.remove('done', 'error');
+
+  if (data.step === 'done') {
+    spinner.style.display = 'none';
+    icon.style.display = 'inline';
+    icon.textContent = '✓';
+    icon.className = 'ps-icon-done';
+    barFill.classList.add('done');
+    if (runBtn) runBtn.disabled = false;
+  } else if (data.step === 'error') {
+    spinner.style.display = 'none';
+    icon.style.display = 'inline';
+    icon.textContent = '✕';
+    icon.className = 'ps-icon-error';
+    barFill.classList.add('error');
+    if (runBtn) runBtn.disabled = false;
+  } else {
+    spinner.style.display = 'inline-block';
+    icon.style.display = 'none';
+    if (runBtn) runBtn.disabled = true;
+  }
+
+  // Auto-refresh the page once when the pipeline finishes so the table updates
+  if ((data.step === 'done' || data.step === 'error') && lastStep !== data.step && lastStep !== null) {
+    setTimeout(() => window.location.reload(), 1200);
+  }
+  lastStep = data.step;
+}
+
+async function pollStatus() {
+  try {
+    const res = await fetch('/pipeline-status');
+    const data = await res.json();
+    renderStatus(data);
+  } catch (e) {
+    // Silent fail — server might be mid-restart
+  }
+}
+
+pollStatus();
+pollTimer = setInterval(pollStatus, 2000);
+</script>
+
 </body>
 </html>

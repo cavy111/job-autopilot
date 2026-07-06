@@ -58,13 +58,22 @@ CV_POINTER = Path("active_cv.txt")
 # ── Pipeline steps ──────────────────────────────────────────────────────────
 
 def step_scrape() -> list[dict]:
-    """Step 1 — Scrape fresh job listings from vacancymail."""
+    """Step 1 — Scrape fresh job listings from vacancymail, skipping detail
+    fetches for jobs we've already tracked (major speed improvement)."""
     from scrapers.vacancymail import scrape
+    from agents.tracker import get_all
+    from agents.status import write_status
+
     logger.info("── Step 1: Scraping vacancymail.co.zw ──")
+    write_status("scraping", "Scraping vacancymail.co.zw for new listings...", 20)
+
+    tracked_urls = {app["job_url"] for app in get_all()}
+
     jobs = scrape(
         categories=SCRAPE_CATEGORIES,
         max_pages=SCRAPE_MAX_PAGES,
         fetch_details=FETCH_DETAILS,
+        skip_urls=tracked_urls,
     )
     logger.info(f"Scraped {len(jobs)} listings")
     return [j.to_dict() for j in jobs]
@@ -73,6 +82,8 @@ def step_scrape() -> list[dict]:
 def step_filter_new(jobs: list[dict]) -> list[dict]:
     """Step 2 — Remove jobs already in the database."""
     from agents.tracker import already_tracked
+    from agents.status import write_status
+    write_status("filtering", "Filtering out already-tracked jobs...", 35)
     new_jobs = [j for j in jobs if not already_tracked(j["url"])]
     logger.info(f"── Step 2: {len(new_jobs)} new jobs (filtered {len(jobs) - len(new_jobs)} already tracked)")
     return new_jobs
@@ -82,8 +93,10 @@ def step_score(jobs: list[dict], cv_profile: dict) -> list[tuple[dict, object]]:
     """Step 3 — Score each job and split into apply/review/skip."""
     from agents.relevance_filter import filter_jobs
     from agents.tracker import upsert_job
+    from agents.status import write_status
 
     logger.info("── Step 3: Scoring jobs ──")
+    write_status("scoring", f"Scoring {len(jobs)} jobs against your CV...", 50)
     results = filter_jobs(jobs, cv_profile)
 
     apply_list  = []
@@ -113,11 +126,19 @@ def step_apply(apply_list: list[tuple], cv_profile: dict, dry_run: bool = True):
     from agents.cover_letter import generate_cover_letter
     from agents.submission import send_application
     from agents.tracker import update_status
+    from agents.status import write_status
 
     logger.info(f"── Step 4: Applying to {len(apply_list)} jobs (dry_run={dry_run}) ──")
+    total = len(apply_list) or 1
 
-    for job, result in apply_list:
+    for i, (job, result) in enumerate(apply_list, 1):
         logger.info(f"Processing: {job['title']} @ {job['company']} ({result.score}/100)")
+        progress = 60 + int((i - 1) / total * 30)
+        write_status(
+            "applying",
+            f"Tailoring documents for {job['title']} @ {job['company']} ({i}/{total})",
+            progress,
+        )
 
         update_status(job["url"], "tailoring")
 
@@ -162,7 +183,9 @@ def step_apply(apply_list: list[tuple], cv_profile: dict, dry_run: bool = True):
 def step_followups(dry_run: bool = True):
     """Step 5 — Send follow-up emails for due applications."""
     from agents.followup import run_followups
+    from agents.status import write_status
     logger.info("── Step 5: Checking follow-ups ──")
+    write_status("followups", "Checking for due follow-ups...", 92)
     count = run_followups(dry_run=dry_run)
     logger.info(f"Follow-ups processed: {count}")
 
@@ -170,6 +193,8 @@ def step_followups(dry_run: bool = True):
 # ── Entry point ─────────────────────────────────────────────────────────────
 
 def main():
+    from agents.status import write_status
+
     parser = argparse.ArgumentParser(description="Job Application Autopilot")
     parser.add_argument("--cv",             type=str,            help="Path to CV file (.docx or .pdf)")
     parser.add_argument("--send",           action="store_true", help="Actually send emails (default: dry run)")
@@ -179,71 +204,82 @@ def main():
 
     dry_run = not args.send
 
-    # Init database
-    from agents.tracker import init_db
-    init_db()
+    try:
+        # Init database
+        from agents.tracker import init_db
+        init_db()
 
-    if dry_run:
-        logger.info("🔒 DRY RUN MODE — no emails will be sent (use --send to go live)")
+        if dry_run:
+            logger.info("🔒 DRY RUN MODE — no emails will be sent (use --send to go live)")
 
-    # Follow-ups only — no CV needed
-    if args.followups_only:
+        # Follow-ups only — no CV needed
+        if args.followups_only:
+            write_status("followups", "Checking for due follow-ups...", 10)
+            step_followups(dry_run=dry_run)
+            write_status("done", "Follow-up check complete.", 100)
+            return
+
+        # Resolve CV path: --cv flag > active_cv.txt (set by dashboard) > CV_PATH constant
+        cv_path = args.cv
+        if not cv_path and CV_POINTER.exists():
+            cv_path = CV_POINTER.read_text().strip()
+        if not cv_path:
+            cv_path = CV_PATH
+
+        if not cv_path or not Path(cv_path).exists():
+            msg = "No CV file found. Upload one via the dashboard or pass --cv path/to/cv.docx"
+            logger.error(msg)
+            write_status("error", msg, 0)
+            sys.exit(1)
+
+        logger.info(f"── Loading CV: {cv_path} ──")
+        write_status("loading_cv", "Reading and parsing your CV...", 5)
+        from agents.cv_parser import parse_cv
+
+        if os.getenv("QWEN_API_KEY"):
+            cv_profile = parse_cv(cv_path, use_llm=True)
+        else:
+            logger.warning("QWEN_API_KEY not set — using hardcoded CV profile")
+            cv_profile = _hardcoded_cv_profile()
+
+        # Scrape
+        jobs = step_scrape()
+        if not jobs:
+            write_status("done", "No jobs scraped this run.", 100)
+            logger.info("No jobs scraped — exiting")
+            return
+
+        # Filter already-tracked
+        new_jobs = step_filter_new(jobs)
+        if not new_jobs:
+            write_status("done", "No new jobs found this run.", 100)
+            logger.info("No new jobs found — exiting")
+            return
+
+        # Score
+        apply_list = step_score(new_jobs, cv_profile)
+
+        if args.scrape_only:
+            write_status("done", "Scrape and score complete.", 100)
+            logger.info("--scrape-only flag set — stopping before document generation")
+            return
+
+        # Apply
+        if apply_list:
+            step_apply(apply_list, cv_profile, dry_run=dry_run)
+        else:
+            logger.info("No jobs met the apply threshold this run")
+
+        # Follow-ups
         step_followups(dry_run=dry_run)
-        return
 
-    # Resolve CV path: --cv flag > active_cv.txt (set by dashboard) > CV_PATH constant
-    cv_path = args.cv
-    if not cv_path and CV_POINTER.exists():
-        cv_path = CV_POINTER.read_text().strip()
-    if not cv_path:
-        cv_path = CV_PATH
+        write_status("done", f"Pipeline complete — {len(apply_list)} application(s) processed.", 100)
+        logger.info("── Pipeline complete ──")
 
-    if not cv_path or not Path(cv_path).exists():
-        logger.error(
-            "No CV file found. Either:\n"
-            "  1. Upload your CV via the dashboard at http://localhost:8000\n"
-            "  2. Pass it directly: python main.py --cv path/to/your-cv.docx"
-        )
-        sys.exit(1)
-
-    logger.info(f"── Loading CV: {cv_path} ──")
-    from agents.cv_parser import parse_cv
-
-    if os.getenv("QWEN_API_KEY"):
-        cv_profile = parse_cv(cv_path, use_llm=True)
-    else:
-        logger.warning("QWEN_API_KEY not set — using hardcoded CV profile")
-        cv_profile = _hardcoded_cv_profile()
-
-    # Scrape
-    jobs = step_scrape()
-    if not jobs:
-        logger.info("No jobs scraped — exiting")
-        return
-
-    # Filter already-tracked
-    new_jobs = step_filter_new(jobs)
-    if not new_jobs:
-        logger.info("No new jobs found — exiting")
-        return
-
-    # Score
-    apply_list = step_score(new_jobs, cv_profile)
-
-    if args.scrape_only:
-        logger.info("--scrape-only flag set — stopping before document generation")
-        return
-
-    # Apply
-    if apply_list:
-        step_apply(apply_list, cv_profile, dry_run=dry_run)
-    else:
-        logger.info("No jobs met the apply threshold this run")
-
-    # Follow-ups
-    step_followups(dry_run=dry_run)
-
-    logger.info("── Pipeline complete ──")
+    except Exception as e:
+        logger.exception("Pipeline failed")
+        write_status("error", f"Pipeline failed: {e}", 0)
+        raise
 
 
 def _hardcoded_cv_profile() -> dict:
