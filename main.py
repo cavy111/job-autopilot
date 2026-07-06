@@ -5,7 +5,7 @@ Runs the full pipeline end-to-end:
 
   1. Scrape vacancymail.co.zw for new ICT job listings
   2. Filter out already-tracked jobs
-  3. Score each listing against Calvin's CV (heuristic or LLM)
+  3. Score each listing against the candidate's CV (heuristic or LLM)
   4. For jobs scoring >= APPLY_THRESHOLD:
        a. Parse CV (from cache or fresh)
        b. Tailor CV to job
@@ -15,15 +15,16 @@ Runs the full pipeline end-to-end:
   5. Send follow-up emails for any due applications
 
 Usage:
-  python main.py                  # full pipeline, dry_run=True (safe default)
-  python main.py --send           # actually send emails
-  python main.py --followups-only # only run follow-up check
-  python main.py --scrape-only    # only scrape and score, no documents
+  python main.py --cv path/to/cv.docx       # full pipeline, dry run (safe default)
+  python main.py --cv path/to/cv.docx --send # actually send emails
+  python main.py --followups-only            # only run follow-up check
+  python main.py --scrape-only               # only scrape and score, no documents
 """
 
 import argparse
 import logging
 import sys
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -39,16 +40,19 @@ logger = logging.getLogger("orchestrator")
 
 # ── Config ──────────────────────────────────────────────────────────────────
 
-CV_PATH        = "Calvin_Dube_CV_Gateway.docx"   # your CV file
-APPLY_THRESHOLD = 70   # minimum score to auto-apply
-REVIEW_THRESHOLD = 50  # scores 50-69 logged but not auto-applied
+CV_PATH          = ""    # Set via --cv flag or upload via dashboard
+APPLY_THRESHOLD  = 70    # minimum score to auto-apply
+REVIEW_THRESHOLD = 50    # scores 50-69 logged but not auto-applied
 
 SCRAPE_CATEGORIES = ["ict"]
 SCRAPE_MAX_PAGES  = 3
-FETCH_DETAILS     = True   # fetch full job descriptions (slower but better scoring)
+FETCH_DETAILS     = True  # fetch full job descriptions (slower but better scoring)
 
 OUTPUT_DIR_CVS    = "output/cvs"
 OUTPUT_DIR_COVERS = "output/cover_letters"
+
+# Path written by the dashboard when a CV is uploaded
+CV_POINTER = Path("active_cv.txt")
 
 
 # ── Pipeline steps ──────────────────────────────────────────────────────────
@@ -115,29 +119,23 @@ def step_apply(apply_list: list[tuple], cv_profile: dict, dry_run: bool = True):
     for job, result in apply_list:
         logger.info(f"Processing: {job['title']} @ {job['company']} ({result.score}/100)")
 
-        # Update status to tailoring
         update_status(job["url"], "tailoring")
 
-        # 4a — Tailor CV
         cv_out = tailor_cv(cv_profile, job, output_dir=OUTPUT_DIR_CVS, dry_run=dry_run)
-
-        # 4b — Generate cover letter
         cl_out = generate_cover_letter(cv_profile, job, output_dir=OUTPUT_DIR_COVERS, dry_run=dry_run)
 
         if not dry_run:
             update_status(job["url"], "ready", cv_path=cv_out, cover_letter_path=cl_out)
 
-        # 4c — Determine recipient email
         contact_email = job.get("contact_email") or ""
         if not contact_email:
             logger.warning(f"No contact email for {job['title']} — skipping submission")
             update_status(job["url"], "closed", notes="No contact email found")
             continue
 
-        # 4d — Build subject line
-        subject = f"Application for {job['title']} — Dube Calvin"
+        name    = cv_profile.get("name", "Applicant")
+        subject = f"Application for {job['title']} — {name}"
 
-        # 4e — Send email
         sent = send_application(
             cv_profile=cv_profile,
             job=job,
@@ -173,6 +171,7 @@ def step_followups(dry_run: bool = True):
 
 def main():
     parser = argparse.ArgumentParser(description="Job Application Autopilot")
+    parser.add_argument("--cv",             type=str,            help="Path to CV file (.docx or .pdf)")
     parser.add_argument("--send",           action="store_true", help="Actually send emails (default: dry run)")
     parser.add_argument("--followups-only", action="store_true", help="Only run follow-up check")
     parser.add_argument("--scrape-only",    action="store_true", help="Only scrape and score, no documents")
@@ -187,20 +186,32 @@ def main():
     if dry_run:
         logger.info("🔒 DRY RUN MODE — no emails will be sent (use --send to go live)")
 
-    # Follow-ups only
+    # Follow-ups only — no CV needed
     if args.followups_only:
         step_followups(dry_run=dry_run)
         return
 
-    # Load CV profile
-    logger.info("── Loading CV ──")
-    from agents.cv_parser import parse_cv, extract_raw_text
-    import os
+    # Resolve CV path: --cv flag > active_cv.txt (set by dashboard) > CV_PATH constant
+    cv_path = args.cv
+    if not cv_path and CV_POINTER.exists():
+        cv_path = CV_POINTER.read_text().strip()
+    if not cv_path:
+        cv_path = CV_PATH
+
+    if not cv_path or not Path(cv_path).exists():
+        logger.error(
+            "No CV file found. Either:\n"
+            "  1. Upload your CV via the dashboard at http://localhost:8000\n"
+            "  2. Pass it directly: python main.py --cv path/to/your-cv.docx"
+        )
+        sys.exit(1)
+
+    logger.info(f"── Loading CV: {cv_path} ──")
+    from agents.cv_parser import parse_cv
 
     if os.getenv("QWEN_API_KEY"):
-        cv_profile = parse_cv(CV_PATH, use_llm=True)
+        cv_profile = parse_cv(cv_path, use_llm=True)
     else:
-        # Fallback: use hardcoded profile until Qwen credits arrive
         logger.warning("QWEN_API_KEY not set — using hardcoded CV profile")
         cv_profile = _hardcoded_cv_profile()
 
@@ -236,7 +247,7 @@ def main():
 
 
 def _hardcoded_cv_profile() -> dict:
-    """Fallback CV profile used when QWEN_API_KEY is not yet available."""
+    """Fallback CV profile used when QWEN_API_KEY is not set."""
     return {
         "name":  "Dube Calvin",
         "email": "calvindube.cd@gmail.com",
@@ -259,11 +270,11 @@ def _hardcoded_cv_profile() -> dict:
         },
         "experience": [
             {
-                "title":   "Web Applications Developer",
-                "company": "CNBS Accounting Officers",
-                "location":"Pretoria, South Africa",
-                "period":  "May 2024 – June 2025",
-                "bullets": [
+                "title":    "Web Applications Developer",
+                "company":  "CNBS Accounting Officers",
+                "location": "Pretoria, South Africa",
+                "period":   "May 2024 – June 2025",
+                "bullets":  [
                     "Provided ongoing IT systems support for internal web applications.",
                     "Diagnosed and resolved software defects across React/Django stack.",
                     "Maintained production systems on DigitalOcean.",
@@ -272,21 +283,21 @@ def _hardcoded_cv_profile() -> dict:
                 ],
             },
             {
-                "title":   "ICT Facilitator",
-                "company": "Fountain Junior School",
-                "location":"Zimbabwe",
-                "period":  "February 2026 – April 2026",
-                "bullets": [
+                "title":    "ICT Facilitator",
+                "company":  "Fountain Junior School",
+                "location": "Zimbabwe",
+                "period":   "February 2026 – April 2026",
+                "bullets":  [
                     "Managed classroom computer equipment and troubleshot hardware/software issues.",
                     "Delivered ICT support and training to staff and students.",
                 ],
             },
             {
-                "title":   "Laboratory Technician Assistant",
-                "company": "Midlands State University",
-                "location":"Gweru, Zimbabwe",
-                "period":  "September 2019 – September 2020",
-                "bullets": [
+                "title":    "Laboratory Technician Assistant",
+                "company":  "Midlands State University",
+                "location": "Gweru, Zimbabwe",
+                "period":   "September 2019 – September 2020",
+                "bullets":  [
                     "Provided technical support within a university laboratory.",
                     "Maintained accurate records and ensured systems were operational.",
                 ],
