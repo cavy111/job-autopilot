@@ -166,7 +166,7 @@ def _call_llm(raw_text: str) -> dict:
 
     logger.info("Sending CV text to Qwen for structuring...")
     response = client.chat.completions.create(
-        model="qwen-turbo",
+        model="qwen3.5-plus",
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": f"Parse this CV:\n\n{raw_text}"},
