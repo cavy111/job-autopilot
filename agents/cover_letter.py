@@ -122,7 +122,7 @@ def _call_llm(system_prompt: str, user_message: str) -> dict:
 
     logger.info("Calling Qwen to generate cover letter...")
     response = client.chat.completions.create(
-        model="qwen-plus",
+        model="qwen-turbo",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_message},

@@ -344,7 +344,7 @@ Description: {(job.get('description') or 'Not available')[:800]}
     user_message = f"CANDIDATE:\n{candidate_summary}\n\nJOB:\n{job_text}"
 
     response = client.chat.completions.create(
-        model="qwen-plus",
+        model="qwen-turbo",
         messages=[
             {"role": "system", "content": LLM_SYSTEM_PROMPT},
             {"role": "user", "content": user_message},
