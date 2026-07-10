@@ -1,21 +1,12 @@
 """
 api/main.py — FastAPI Dashboard
-
-Shows a real-time view of the job application pipeline:
-  - Stats (total, sent, pending, review, interview)
-  - Applications table with status, score, company, role
-  - Action buttons: mark as interview, rejected, closed
-  - Trigger a new pipeline run from the UI
-
-Run with: uvicorn api.main:app --reload
 """
 
-from fastapi import FastAPI, Request, Form
+from fastapi import FastAPI, Request, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
-import sys, os
+import sys, os, shutil
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -23,6 +14,10 @@ from agents.tracker import init_db, get_all, get_stats, update_status
 
 app = FastAPI(title="Job Application Autopilot")
 templates = Jinja2Templates(directory="api/templates")
+
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
+CV_POINTER = Path("active_cv.txt")
 
 init_db()
 
@@ -37,26 +32,54 @@ STATUS_COLORS = {
     "closed":      "#adb5bd",
 }
 
+
+def get_active_cv() -> str | None:
+    if CV_POINTER.exists():
+        path = CV_POINTER.read_text().strip()
+        if Path(path).exists():
+            return path
+    return None
+
+
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     apps  = get_all()
     stats = get_stats()
+    cv    = get_active_cv()
     for a in apps:
         a["status_color"] = STATUS_COLORS.get(a["status"], "#6c757d")
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
-        context={"apps": apps, "stats": stats},
+        context={"apps": apps, "stats": stats, "active_cv": cv},
     )
+
+
+@app.post("/upload-cv")
+async def upload_cv(cv_file: UploadFile = File(...)):
+    safe_name = Path(cv_file.filename).name  # strip any directory components
+    suffix = Path(safe_name).suffix.lower()
+    if not safe_name or suffix not in {".docx", ".pdf"}:
+        return RedirectResponse("/?error=invalid_file_type", status_code=303)
+    dest = UPLOAD_DIR / safe_name
+    with open(dest, "wb") as f:
+        shutil.copyfileobj(cv_file.file, f)
+    CV_POINTER.write_text(str(dest))
+    return RedirectResponse("/", status_code=303)
+
 
 @app.post("/update-status")
 async def update(job_url: str = Form(...), status: str = Form(...)):
     update_status(job_url, status)
     return RedirectResponse("/", status_code=303)
 
+
 @app.post("/run-pipeline")
 async def run_pipeline():
-    """Trigger a pipeline run in the background."""
-    import subprocess, sys
-    subprocess.Popen([sys.executable, "main.py"])
+    import subprocess
+    cv = get_active_cv()
+    cmd = [sys.executable, "main.py"]
+    if cv:
+        cmd += ["--cv", cv]
+    subprocess.Popen(cmd)
     return RedirectResponse("/", status_code=303)

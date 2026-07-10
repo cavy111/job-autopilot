@@ -22,7 +22,7 @@ CV Parser → Job Scraper → Relevance Filter → CV Tailor → Cover Letter �
 6. **Submission Agent** — Sends the application email with `.docx` attachments via Gmail API
 7. **Tracker + Follow-up** — Logs every application to SQLite and sends follow-ups after 7 days
 
-A **FastAPI dashboard** provides a real-time view of all applications, scores, and statuses.
+A **FastAPI dashboard** provides a real-time view of all applications, scores, and statuses — with a CV upload button to get started without touching any config files.
 
 ---
 
@@ -37,7 +37,6 @@ A **FastAPI dashboard** provides a real-time view of all applications, scores, a
 | Email | Gmail API (OAuth2) |
 | Database | SQLite |
 | Dashboard | FastAPI + Jinja2 |
-| Deployment | Alibaba Cloud ECS |
 
 ---
 
@@ -97,11 +96,9 @@ pip install -r requirements.txt
 # Copy the example env file
 cp .env.example .env
 
-# Add your Qwen API key
+# Add your Qwen API key to .env
 QWEN_API_KEY=your_qwen_api_key_here
 ```
-
-Place your CV in the project root and update `CV_PATH` in `main.py` if needed (default: `Calvin_Dube_CV_Gateway.docx`).
 
 ### Gmail API Setup
 
@@ -114,14 +111,22 @@ Place your CV in the project root and update `CV_PATH` in `main.py` if needed (d
 
 > `credentials.json` and `token.json` are gitignored — never commit these files.
 
-### Running the Pipeline
+### Running the Dashboard
+
+```bash
+uvicorn api.main:app --reload
+```
+
+Open **http://localhost:8000** — upload your CV using the upload button on the dashboard, then click **Run Pipeline Now**.
+
+### Running the Pipeline from CLI
 
 ```bash
 # Dry run (safe — no emails sent)
-python main.py
+python main.py --cv path/to/your-cv.docx
 
 # Live mode — sends real emails
-python main.py --send
+python main.py --cv path/to/your-cv.docx --send
 
 # Only check and send follow-ups
 python main.py --followups-only
@@ -129,14 +134,6 @@ python main.py --followups-only
 # Only scrape and score, skip document generation
 python main.py --scrape-only
 ```
-
-### Running the Dashboard
-
-```bash
-uvicorn api.main:app --reload
-```
-
-Open **http://localhost:8000** to view the dashboard.
 
 ---
 
@@ -180,10 +177,11 @@ This means the full pipeline can be tested and iterated without spending any API
 
 The FastAPI dashboard at `http://localhost:8000` shows:
 
+- **CV upload** — drag and drop your `.docx` or `.pdf` CV to get started
 - **Stats row** — total tracked, sent, interviews, pending, rejected
 - **Application table** — role, company, relevance score bar, status badge, expiry date
 - **Status controls** — manually mark applications as interview/rejected/closed
-- **Run Pipeline** — trigger a new pipeline run from the UI
+- **Run Pipeline** — trigger a new pipeline run from the UI (disabled until CV is uploaded)
 
 ---
 
@@ -198,7 +196,7 @@ The FastAPI dashboard at `http://localhost:8000` shows:
 
 ## Author
 
-**Dube Calvin** — BSc (Hons) Information Systems, Midlands State University  
+**Dube Calvin** — BSc (Hons) Information Systems, Midlands State University
 GitHub: [@cavy111](https://github.com/cavy111)
 
 ---
