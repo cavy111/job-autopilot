@@ -31,8 +31,8 @@ logger = logging.getLogger(__name__)
 
 CREDENTIALS_FILE = "credentials.json"
 TOKEN_FILE       = "token.json"
-SENDER_NAME      = "Dube Calvin"
-SENDER_EMAIL     = "REDACTED@example.com"
+SENDER_NAME      = os.getenv("SENDER_NAME", "Applicant")
+SENDER_EMAIL     = os.getenv("SENDER_EMAIL", "")
 
 # Gmail API scopes needed
 SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
@@ -93,13 +93,15 @@ def _build_email(
     body: str,
     cv_path: Optional[str] = None,
     cover_letter_path: Optional[str] = None,
+    sender_name: Optional[str] = None,
+    sender_email: Optional[str] = None,
 ) -> str:
     """
     Build a MIME email with optional .docx attachments.
     Returns base64url-encoded string ready for Gmail API.
     """
     msg = MIMEMultipart()
-    msg["From"]    = f"{SENDER_NAME} <{SENDER_EMAIL}>"
+    msg["From"]    = f"{sender_name or SENDER_NAME} <{sender_email or SENDER_EMAIL}>"
     msg["To"]      = to
     msg["Subject"] = subject
 
@@ -135,7 +137,7 @@ def _build_email_body(cv_profile: dict, job: dict) -> str:
     Build a short, professional plain-text email body.
     The cover letter does the heavy lifting — this is just the email wrapper.
     """
-    name  = cv_profile.get("name", "Dube Calvin")
+    name  = cv_profile.get("name", SENDER_NAME)
     title = job.get("title", "the advertised position")
     company = job.get("company", "your organisation")
 
@@ -205,6 +207,8 @@ def send_application(
             body=body,
             cv_path=cv_path,
             cover_letter_path=cover_letter_path,
+            sender_name=cv_profile.get("name"),
+            sender_email=cv_profile.get("email"),
         )
         service.users().messages().send(
             userId="me",
@@ -224,9 +228,9 @@ def send_application(
 
 if __name__ == "__main__":
     cv_profile = {
-        "name":  "Dube Calvin",
-        "email": "REDACTED@example.com",
-        "phone": "+263 00 000 0000",
+        "name":  SENDER_NAME,
+        "email": SENDER_EMAIL,
+        "phone": os.getenv("SENDER_PHONE", ""),
     }
 
     job = {
@@ -243,7 +247,7 @@ if __name__ == "__main__":
         job=job,
         cv_path="output/cvs/CV_example.docx",
         cover_letter_path="output/cover_letters/CoverLetter_example.docx",
-        contact_email="REDACTED@example.com",  # send to yourself for testing
-        subject="Application for Regulatory Technology Systems Developers — Dube Calvin",
-        dry_run=False,
+        contact_email=SENDER_EMAIL,  # send to yourself for testing
+        subject=f"Application for Regulatory Technology Systems Developers — {SENDER_NAME}",
+        dry_run=True,
     )

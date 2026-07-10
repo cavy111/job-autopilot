@@ -14,10 +14,14 @@ Stage 2 uses the Qwen API (swap base_url to test with OpenAI-compatible APIs).
 
 import json
 import os
+import sys
 import logging
 from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from llm_utils import parse_llm_json
 
 load_dotenv()
 
@@ -176,19 +180,7 @@ def _call_llm(raw_text: str) -> dict:
     )
 
     raw_response = response.choices[0].message.content.strip()
-
-    # Strip markdown fences if the model added them despite instructions
-    if raw_response.startswith("```"):
-        raw_response = raw_response.split("```")[1]
-        if raw_response.startswith("json"):
-            raw_response = raw_response[4:]
-    raw_response = raw_response.strip()
-
-    try:
-        return json.loads(raw_response)
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse LLM response as JSON: {e}")
-        raise ValueError("LLM returned malformed JSON. Try running again.")
+    return parse_llm_json(raw_response)
 
 
 # ---------------------------------------------------------------------------

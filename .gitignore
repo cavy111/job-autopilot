@@ -7,6 +7,9 @@ venv/
 *.sqlite3
 test_output.json
 Calvin_Dube_CV_Gateway.docx
+cv_profile.local.json
 credentials.json
 token.json
 venv/
+uploads/
+active_cv.txt

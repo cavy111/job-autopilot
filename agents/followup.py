@@ -11,6 +11,7 @@ And sends a polite follow-up email for each one via Gmail.
 Designed to be called by the orchestrator on a schedule (e.g. daily).
 """
 
+import os
 import logging
 from datetime import datetime
 from dotenv import load_dotenv
@@ -20,8 +21,9 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-SENDER_NAME  = "Dube Calvin"
-SENDER_EMAIL = "REDACTED@example.com"
+SENDER_NAME  = os.getenv("SENDER_NAME", "Applicant")
+SENDER_EMAIL = os.getenv("SENDER_EMAIL", "")
+SENDER_PHONE = os.getenv("SENDER_PHONE", "")
 
 
 def _build_followup_body(app: dict) -> str:
@@ -37,7 +39,7 @@ Please let me know if you need any additional information from me. I look forwar
 Yours sincerely,
 {SENDER_NAME}
 {SENDER_EMAIL}
-+263 00 000 0000
+{SENDER_PHONE}
 """.strip()
 
 

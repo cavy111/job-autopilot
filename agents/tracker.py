@@ -199,7 +199,7 @@ if __name__ == "__main__":
         "sent",
         sent_at=sent_at,
         follow_up_at=follow_up_at,
-        email_subject="Application for Software Developer — Dube Calvin",
+        email_subject="Application for Software Developer — Test Applicant",
         contact_email="hr@techcorp.co.zw",
     )
 

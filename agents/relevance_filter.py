@@ -21,12 +21,17 @@ Score: 0-100
 """
 
 import os
+import sys
 import json
 import logging
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from llm_utils import parse_llm_json
 
 load_dotenv()
 
@@ -354,13 +359,7 @@ Description: {(job.get('description') or 'Not available')[:800]}
     )
 
     raw = response.choices[0].message.content.strip()
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    raw = raw.strip()
-
-    result = json.loads(raw)
+    result = parse_llm_json(raw)
     score = int(result.get("score", 0))
 
     return FilterResult(
