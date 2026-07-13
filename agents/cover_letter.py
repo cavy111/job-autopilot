@@ -4,7 +4,7 @@ agents/cover_letter.py
 Generates a tailored cover letter as a .docx file for a specific job.
 
 What it produces:
-  - Professional cover letter in Calvin's voice
+  - Professional cover letter in the candidate's voice
   - 3-4 paragraphs: hook, relevant experience, skills fit, closing
   - Saved as a .docx with matching navy blue Arial theme
   - Filename: CoverLetter_Company_Role_timestamp.docx
@@ -20,6 +20,10 @@ import logging
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
+try:
+    from agents.llm_utils import parse_llm_json
+except ImportError:  # allow running this file standalone from agents/
+    from llm_utils import parse_llm_json
 
 load_dotenv()
 
@@ -122,7 +126,7 @@ def _call_llm(system_prompt: str, user_message: str) -> dict:
 
     logger.info("Calling Qwen to generate cover letter...")
     response = client.chat.completions.create(
-        model="qwen3.5-plus",
+        model="qwen-plus",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_message},
@@ -132,13 +136,7 @@ def _call_llm(system_prompt: str, user_message: str) -> dict:
     )
 
     raw = response.choices[0].message.content.strip()
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    raw = raw.strip()
-
-    return json.loads(raw)
+    return parse_llm_json(raw)
 
 
 # ---------------------------------------------------------------------------
@@ -288,62 +286,8 @@ if __name__ == "__main__":
     from pathlib import Path
     import json
 
-    # Reuse the same hardcoded profile from cv_tailor.py
-    cv_profile = {
-        "name": "Dube Calvin",
-        "email": "calvindube.cd@gmail.com",
-        "phone": "+263 782 821 968",
-        "location": "Zimbabwe",
-        "summary": (
-            "BSc (Hons) Information Systems graduate with over a year of professional "
-            "software development and IT systems experience. Proficient in Python, "
-            "JavaScript, PHP, and Java with hands-on Django and React experience."
-        ),
-        "skills": {
-            "languages":  ["Python", "JavaScript", "PHP", "Java", "HTML5", "CSS3"],
-            "frameworks": ["Django", "React", "Laravel", "Spring Boot"],
-            "databases":  ["SQL", "MySQL", "PostgreSQL", "SQLite"],
-            "devops":     ["DigitalOcean", "Git", "REST APIs"],
-            "other":      ["Full-stack debugging", "IT systems support", "Technical documentation"],
-        },
-        "experience": [
-            {
-                "title": "Web Applications Developer",
-                "company": "CNBS Accounting Officers",
-                "location": "Pretoria, South Africa",
-                "period": "May 2024 – June 2025",
-                "bullets": [
-                    "Provided ongoing IT systems support for internal web applications.",
-                    "Diagnosed and resolved software defects across React/Django stack.",
-                    "Maintained production systems on DigitalOcean.",
-                ],
-            },
-            {
-                "title": "ICT Facilitator",
-                "company": "Fountain Junior School",
-                "location": "Zimbabwe",
-                "period": "February 2026 – April 2026",
-                "bullets": [
-                    "Managed classroom computer equipment and troubleshot hardware/software issues.",
-                    "Delivered ICT support and training to staff and students.",
-                ],
-            },
-        ],
-        "education": [
-            {
-                "degree": "BSc (Hons) Information Systems",
-                "grade": "2.1",
-                "institution": "Midlands State University",
-                "location": "Gweru, Zimbabwe",
-                "period": "2017 – 2022",
-            }
-        ],
-        "certifications": [
-            "JPMorgan Chase Software Engineering Job Simulation · Forage · May 2026",
-        ],
-        "references": [],
-        "raw_text": "",
-    }
+    from agents.sample_profile import SAMPLE_CV_PROFILE
+    cv_profile = dict(SAMPLE_CV_PROFILE)
 
     listings_path = Path("test_output.json")
     if listings_path.exists():

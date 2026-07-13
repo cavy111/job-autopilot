@@ -31,8 +31,8 @@ logger = logging.getLogger(__name__)
 
 CREDENTIALS_FILE = "credentials.json"
 TOKEN_FILE       = "token.json"
-SENDER_NAME      = "Dube Calvin"
-SENDER_EMAIL     = "calvindube.cd@gmail.com"
+SENDER_NAME      = os.getenv("SENDER_NAME", "Your Name")
+SENDER_EMAIL     = os.getenv("SENDER_EMAIL", "you@example.com")
 
 # Gmail API scopes needed
 SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
@@ -135,7 +135,7 @@ def _build_email_body(cv_profile: dict, job: dict) -> str:
     Build a short, professional plain-text email body.
     The cover letter does the heavy lifting — this is just the email wrapper.
     """
-    name  = cv_profile.get("name", "Dube Calvin")
+    name  = cv_profile.get("name", SENDER_NAME)
     title = job.get("title", "the advertised position")
     company = job.get("company", "your organisation")
 
@@ -223,11 +223,8 @@ def send_application(
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    cv_profile = {
-        "name":  "Dube Calvin",
-        "email": "calvindube.cd@gmail.com",
-        "phone": "+263 782 821 968",
-    }
+    from agents.sample_profile import SAMPLE_CV_PROFILE
+    cv_profile = {k: SAMPLE_CV_PROFILE[k] for k in ("name", "email", "phone")}
 
     job = {
         "title":    "Regulatory Technology Systems Developers x3",
@@ -243,7 +240,7 @@ if __name__ == "__main__":
         job=job,
         cv_path="output/cvs/CV_example.docx",
         cover_letter_path="output/cover_letters/CoverLetter_example.docx",
-        contact_email="calvindube.cd@gmail.com",  # send to yourself for testing
-        subject="Application for Regulatory Technology Systems Developers — Dube Calvin",
-        dry_run=False,
+        contact_email=SENDER_EMAIL,  # send to yourself for testing
+        subject=f"Application for {job['title']} — {cv_profile['name']}",
+        dry_run=True,
     )

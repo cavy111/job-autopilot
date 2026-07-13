@@ -1,7 +1,7 @@
 """
 agents/cv_tailor.py
 
-Takes Calvin's parsed CV profile and a job listing, and produces a
+Takes the candidate's parsed CV profile and a job listing, and produces a
 tailored CV as a .docx file — rewriting the summary and reordering
 skills to match the job description.
 
@@ -25,13 +25,17 @@ import logging
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
+try:
+    from agents.llm_utils import parse_llm_json
+except ImportError:  # allow running this file standalone from agents/
+    from llm_utils import parse_llm_json
 
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# CV styling — matches Calvin's existing navy blue theme
+# CV styling — matches the candidate's navy blue theme
 CV_THEME = {
     "name_color":    "1A5276",   # navy blue
     "heading_color": "1A5276",
@@ -136,7 +140,7 @@ def _call_llm(system_prompt: str, user_message: str) -> dict:
 
     logger.info("Calling Qwen to tailor CV...")
     response = client.chat.completions.create(
-        model="qwen3.5-plus",
+        model="qwen-plus",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
@@ -146,13 +150,7 @@ def _call_llm(system_prompt: str, user_message: str) -> dict:
     )
 
     raw = response.choices[0].message.content.strip()
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    raw = raw.strip()
-
-    return json.loads(raw)
+    return parse_llm_json(raw)
 
 
 # ---------------------------------------------------------------------------
@@ -162,7 +160,7 @@ def _call_llm(system_prompt: str, user_message: str) -> dict:
 def _build_docx(cv_profile: dict, tailored: dict, job: dict, output_path: str):
     """
     Generate a tailored CV .docx file using python-docx.
-    Preserves Calvin's navy blue Arial theme.
+    Preserves the candidate's navy blue Arial theme.
     """
     try:
         from docx import Document
@@ -442,100 +440,8 @@ if __name__ == "__main__":
         }
 
     # Use a minimal cv_profile since we don't have Qwen credits yet for cv_parser
-    cv_profile = {
-        "name": "Dube Calvin",
-        "email": "calvindube.cd@gmail.com",
-        "phone": "+263 782 821 968",
-        "location": "Zimbabwe",
-        "summary": (
-            "BSc (Hons) Information Systems graduate with over a year of professional "
-            "software development and IT systems experience. Skilled in debugging and "
-            "troubleshooting software issues across the full stack, managing and maintaining "
-            "production systems, and providing technical support to end users. Proficient in "
-            "Python, JavaScript, PHP, and Java. Detail-oriented team player who meets deadlines "
-            "consistently and approaches technical problems with structured analytical thinking."
-        ),
-        "skills": {
-            "languages":  ["Python", "JavaScript", "PHP", "Java", "HTML5", "CSS3"],
-            "frameworks": ["Django", "React", "Laravel", "Spring Boot"],
-            "databases":  ["SQL", "MySQL", "PostgreSQL", "SQLite"],
-            "devops":     ["DigitalOcean", "Git", "REST APIs"],
-            "other":      ["Full-stack debugging", "IT systems support", "Technical documentation"],
-        },
-        "experience": [
-            {
-                "title": "Web Applications Developer",
-                "company": "CNBS Accounting Officers",
-                "location": "Pretoria, South Africa",
-                "period": "May 2024 – June 2025",
-                "bullets": [
-                    "Provided ongoing IT systems support for internal web applications.",
-                    "Diagnosed and resolved software defects across React/Django stack.",
-                    "Maintained production systems on DigitalOcean.",
-                    "Supported end users across accounting, marketing, and development teams.",
-                    "Developed and maintained web applications and databases.",
-                ],
-            },
-            {
-                "title": "ICT Facilitator",
-                "company": "Fountain Junior School",
-                "location": "Zimbabwe",
-                "period": "February 2026 – April 2026",
-                "bullets": [
-                    "Managed classroom computer equipment and troubleshot hardware/software issues.",
-                    "Delivered ICT support and training to staff and students.",
-                ],
-            },
-            {
-                "title": "Laboratory Technician Assistant",
-                "company": "Midlands State University",
-                "location": "Gweru, Zimbabwe",
-                "period": "September 2019 – September 2020",
-                "bullets": [
-                    "Provided technical support within a university laboratory.",
-                    "Maintained accurate records and ensured systems were operational.",
-                ],
-            },
-        ],
-        "education": [
-            {
-                "degree": "BSc (Hons) Information Systems",
-                "grade": "2.1",
-                "institution": "Midlands State University",
-                "location": "Gweru, Zimbabwe",
-                "period": "2017 – 2022",
-            },
-            {
-                "degree": "National Certificate in Information Technology",
-                "grade": None,
-                "institution": "Kwekwe Polytechnic",
-                "location": "Kwekwe, Zimbabwe",
-                "period": "2016",
-            },
-        ],
-        "certifications": [
-            "JPMorgan Chase Software Engineering Job Simulation · Forage · May 2026",
-            "Class 4 Driver's Licence",
-        ],
-        "references": [
-            {
-                "name": "Mrs Chibwana",
-                "role": "Director, Fountain Junior School",
-                "contact": "+263 77 321 9259 · Shamisochibwana1975@gmail.com",
-            },
-            {
-                "name": "Mr Giyane",
-                "role": "Chairperson, Computer Science Department, Midlands State University",
-                "contact": "+263 715 134 137 · giyanem@staff.msu.ac.zw",
-            },
-            {
-                "name": "Mr Phenyo Itumeleng",
-                "role": "Senior Developer, CNBS Accounting Officers",
-                "contact": "+27 813 280 275 · phenyoitumeleng@gmail.com",
-            },
-        ],
-        "raw_text": "",
-    }
+    from agents.sample_profile import SAMPLE_CV_PROFILE
+    cv_profile = dict(SAMPLE_CV_PROFILE)
 
     print(f"\nTesting CV tailor for: {job.get('title')} @ {job.get('company')}")
 

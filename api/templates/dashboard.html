@@ -189,7 +189,7 @@
     <table>
       <thead>
         <tr>
-          <th>Role</th><th>Company</th><th>Score</th><th>Status</th><th>Expires</th><th>Sent</th><th>Update</th>
+          <th>Role</th><th>Company</th><th>Score</th><th>Status</th><th>Expires</th><th>Sent</th><th>Action</th><th>Update</th>
         </tr>
       </thead>
       <tbody>
@@ -211,10 +211,25 @@
           <td style="color:#888; font-size:0.82rem;">{{ app.expires or '—' }}</td>
           <td style="color:#888; font-size:0.82rem;">{{ app.sent_at[:10] if app.sent_at else '—' }}</td>
           <td>
+            {% if app.status == 'awaiting_approval' %}
+            <form method="post" action="/approve-application" style="display:inline;">
+              <input type="hidden" name="job_url" value="{{ app.job_url }}">
+              <button type="submit" class="btn btn-success btn-sm" title="Send this application now">✓ Approve &amp; Send</button>
+            </form>
+            <form method="post" action="/reject-application" style="display:inline;">
+              <input type="hidden" name="job_url" value="{{ app.job_url }}">
+              <button type="submit" class="btn btn-sm" style="background:#dc3545;color:#fff;" title="Reject without sending">✕</button>
+            </form>
+            {% else %}
+            <span style="color:#bbb;">—</span>
+            {% endif %}
+          </td>
+          <td>
             <form method="post" action="/update-status" class="update-form">
               <input type="hidden" name="job_url" value="{{ app.job_url }}">
               <select name="status">
                 <option value="pending">pending</option>
+                <option value="awaiting_approval">awaiting_approval</option>
                 <option value="sent">sent</option>
                 <option value="followed_up">followed_up</option>
                 <option value="interview">interview</option>

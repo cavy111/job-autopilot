@@ -1,7 +1,7 @@
 """
 agents/cv_parser.py
 
-Parses Calvin's CV (docx or PDF) into a structured dict that all
+Parses the candidate's CV (docx or PDF) into a structured dict that all
 downstream agents (relevance filter, cv tailor, cover letter) can use.
 
 Two-stage approach:
@@ -18,6 +18,10 @@ import logging
 from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
+try:
+    from agents.llm_utils import parse_llm_json, call_llm_tool
+except ImportError:  # allow running this file standalone from agents/
+    from llm_utils import parse_llm_json, call_llm_tool
 
 load_dotenv()
 
@@ -149,6 +153,71 @@ Rules:
 """
 
 
+
+CV_SCHEMA_TOOL = {
+    "name": "record_cv_profile",
+    "description": "Record the structured CV profile extracted from the candidate's CV text.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "email": {"type": "string"},
+            "phone": {"type": "string"},
+            "location": {"type": "string"},
+            "summary": {"type": "string"},
+            "skills": {
+                "type": "object",
+                "properties": {
+                    "languages":  {"type": "array", "items": {"type": "string"}},
+                    "frameworks": {"type": "array", "items": {"type": "string"}},
+                    "databases":  {"type": "array", "items": {"type": "string"}},
+                    "devops":     {"type": "array", "items": {"type": "string"}},
+                    "other":      {"type": "array", "items": {"type": "string"}},
+                },
+            },
+            "experience": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title":    {"type": "string"},
+                        "company":  {"type": "string"},
+                        "location": {"type": "string"},
+                        "period":   {"type": "string"},
+                        "bullets":  {"type": "array", "items": {"type": "string"}},
+                    },
+                },
+            },
+            "education": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "degree":      {"type": "string"},
+                        "grade":       {"type": "string"},
+                        "institution": {"type": "string"},
+                        "location":    {"type": "string"},
+                        "period":      {"type": "string"},
+                    },
+                },
+            },
+            "certifications": {"type": "array", "items": {"type": "string"}},
+            "references": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name":    {"type": "string"},
+                        "role":    {"type": "string"},
+                        "contact": {"type": "string"},
+                    },
+                },
+            },
+        },
+        "required": ["name"],
+    },
+}
+
 def _call_llm(raw_text: str) -> dict:
     try:
         from openai import OpenAI
@@ -164,31 +233,18 @@ def _call_llm(raw_text: str) -> dict:
         base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
     )
 
-    logger.info("Sending CV text to Qwen for structuring...")
-    response = client.chat.completions.create(
-        model="qwen3.5-plus",
+    logger.info("Sending CV text to Qwen for structuring (function calling)...")
+    return call_llm_tool(
+        client,
+        model="qwen-plus",
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": f"Parse this CV:\n\n{raw_text}"},
         ],
+        tool=CV_SCHEMA_TOOL,
         temperature=0.1,
         max_tokens=2000,
     )
-
-    raw_response = response.choices[0].message.content.strip()
-
-    # Strip markdown fences if the model added them despite instructions
-    if raw_response.startswith("```"):
-        raw_response = raw_response.split("```")[1]
-        if raw_response.startswith("json"):
-            raw_response = raw_response[4:]
-    raw_response = raw_response.strip()
-
-    try:
-        return json.loads(raw_response)
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse LLM response as JSON: {e}")
-        raise ValueError("LLM returned malformed JSON. Try running again.")
 
 
 # ---------------------------------------------------------------------------
@@ -228,7 +284,7 @@ def parse_cv(cv_path: str, use_llm: bool = True) -> dict:
 if __name__ == "__main__":
     import sys
 
-    cv_path = sys.argv[1] if len(sys.argv) > 1 else "Calvin_Dube_CV_Gateway.docx"
+    cv_path = sys.argv[1] if len(sys.argv) > 1 else "sample_cv.docx"
 
     print(f"\nParsing: {cv_path}")
     print("=" * 55)
@@ -255,4 +311,4 @@ if __name__ == "__main__":
     else:
         print("\n[Stage 2] Skipped — QWEN_API_KEY not set in .env")
         print("  Once you have credits, add QWEN_API_KEY=... to your .env")
-        print("  and run: python agents/cv_parser.py Calvin_Dube_CV_Gateway.docx")
+        print("  and run: python agents/cv_parser.py sample_cv.docx")

@@ -28,6 +28,8 @@ import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from agents.sample_profile import SAMPLE_CV_PROFILE
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -120,15 +122,17 @@ def step_score(jobs: list[dict], cv_profile: dict) -> list[tuple[dict, object]]:
     return apply_list
 
 
-def step_apply(apply_list: list[tuple], cv_profile: dict, dry_run: bool = True):
-    """Step 4 — Generate documents and send applications."""
+def step_apply(apply_list: list[tuple], cv_profile: dict, auto_send: bool = False):
+    """Step 4 — Generate tailored documents and stage each application for a
+    human approval checkpoint. Nothing is emailed automatically unless
+    auto_send=True (the --send flag)."""
     from agents.cv_tailor import tailor_cv
     from agents.cover_letter import generate_cover_letter
     from agents.submission import send_application
     from agents.tracker import update_status
     from agents.status import write_status
 
-    logger.info(f"── Step 4: Applying to {len(apply_list)} jobs (dry_run={dry_run}) ──")
+    logger.info(f"── Step 4: Preparing {len(apply_list)} applications (auto_send={auto_send}) ──")
     total = len(apply_list) or 1
 
     for i, (job, result) in enumerate(apply_list, 1):
@@ -142,42 +146,49 @@ def step_apply(apply_list: list[tuple], cv_profile: dict, dry_run: bool = True):
 
         update_status(job["url"], "tailoring")
 
-        cv_out = tailor_cv(cv_profile, job, output_dir=OUTPUT_DIR_CVS, dry_run=dry_run)
-        cl_out = generate_cover_letter(cv_profile, job, output_dir=OUTPUT_DIR_COVERS, dry_run=dry_run)
-
-        if not dry_run:
-            update_status(job["url"], "ready", cv_path=cv_out, cover_letter_path=cl_out)
+        # Generate real documents so a human can review them before sending.
+        cv_out = tailor_cv(cv_profile, job, output_dir=OUTPUT_DIR_CVS, dry_run=False)
+        cl_out = generate_cover_letter(cv_profile, job, output_dir=OUTPUT_DIR_COVERS, dry_run=False)
 
         contact_email = job.get("contact_email") or ""
-        if not contact_email:
-            logger.warning(f"No contact email for {job['title']} — skipping submission")
-            update_status(job["url"], "closed", notes="No contact email found")
-            continue
-
         name    = cv_profile.get("name", "Applicant")
         subject = f"Application for {job['title']} — {name}"
 
-        sent = send_application(
-            cv_profile=cv_profile,
-            job=job,
-            cv_path=cv_out,
-            cover_letter_path=cl_out,
-            contact_email=contact_email,
-            subject=subject,
-            dry_run=dry_run,
-        )
-
-        if sent:
-            sent_at      = datetime.now()
-            follow_up_at = sent_at + timedelta(days=7)
+        # Human-in-the-loop checkpoint: stage for approval, never auto-send by default.
+        if not contact_email:
+            logger.warning(f"No contact email for {job['title']} — needs manual handling")
             update_status(
-                job["url"], "sent",
-                sent_at=sent_at,
-                follow_up_at=follow_up_at,
-                contact_email=contact_email,
-                email_subject=subject,
+                job["url"], "awaiting_approval",
+                cv_path=cv_out, cover_letter_path=cl_out, email_subject=subject,
+                notes="No contact email found — add one before sending",
             )
-            logger.info(f"  ✓ Application sent: {job['title']} @ {job['company']}")
+            continue
+
+        update_status(
+            job["url"], "awaiting_approval",
+            cv_path=cv_out, cover_letter_path=cl_out,
+            contact_email=contact_email, email_subject=subject,
+        )
+        logger.info(f"  ⏸ Awaiting approval: {job['title']} @ {job['company']} → {contact_email}")
+
+        if auto_send:
+            sent = send_application(
+                cv_profile=cv_profile, job=job,
+                cv_path=cv_out, cover_letter_path=cl_out,
+                contact_email=contact_email, subject=subject, dry_run=False,
+            )
+            if sent:
+                sent_at      = datetime.now()
+                follow_up_at = sent_at + timedelta(days=7)
+                update_status(
+                    job["url"], "sent",
+                    sent_at=sent_at, follow_up_at=follow_up_at,
+                    contact_email=contact_email, email_subject=subject,
+                )
+                logger.info(f"  ✓ Auto-sent: {job['title']} @ {job['company']}")
+            else:
+                update_status(job["url"], "awaiting_approval",
+                              notes="Auto-send failed — approve manually from the dashboard")
 
 
 def step_followups(dry_run: bool = True):
@@ -197,7 +208,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="Job Application Autopilot")
     parser.add_argument("--cv",             type=str,            help="Path to CV file (.docx or .pdf)")
-    parser.add_argument("--send",           action="store_true", help="Actually send emails (default: dry run)")
+    parser.add_argument("--send",           action="store_true", help="Auto-approve and send (default: stage for human approval in the dashboard)")
     parser.add_argument("--followups-only", action="store_true", help="Only run follow-up check")
     parser.add_argument("--scrape-only",    action="store_true", help="Only scrape and score, no documents")
     args = parser.parse_args()
@@ -264,16 +275,16 @@ def main():
             logger.info("--scrape-only flag set — stopping before document generation")
             return
 
-        # Apply
+        # Apply — generate documents and stage for human approval
         if apply_list:
-            step_apply(apply_list, cv_profile, dry_run=dry_run)
+            step_apply(apply_list, cv_profile, auto_send=args.send)
         else:
             logger.info("No jobs met the apply threshold this run")
 
         # Follow-ups
         step_followups(dry_run=dry_run)
 
-        write_status("done", f"Pipeline complete — {len(apply_list)} application(s) processed.", 100)
+        write_status("done", f"Pipeline complete — {len(apply_list)} application(s) ready for your review.", 100)
         logger.info("── Pipeline complete ──")
 
     except Exception as e:
@@ -284,100 +295,7 @@ def main():
 
 def _hardcoded_cv_profile() -> dict:
     """Fallback CV profile used when QWEN_API_KEY is not set."""
-    return {
-        "name":  "Dube Calvin",
-        "email": "calvindube.cd@gmail.com",
-        "phone": "+263 782 821 968",
-        "location": "Zimbabwe",
-        "summary": (
-            "BSc (Hons) Information Systems graduate with over a year of professional "
-            "software development and IT systems experience. Skilled in debugging and "
-            "troubleshooting software issues across the full stack, managing and maintaining "
-            "production systems, and providing technical support to end users. Proficient in "
-            "Python, JavaScript, PHP, and Java. Detail-oriented team player who meets deadlines "
-            "consistently and approaches technical problems with structured analytical thinking."
-        ),
-        "skills": {
-            "languages":  ["Python", "JavaScript", "PHP", "Java", "HTML5", "CSS3"],
-            "frameworks": ["Django", "React", "Laravel", "Spring Boot"],
-            "databases":  ["SQL", "MySQL", "PostgreSQL", "SQLite"],
-            "devops":     ["DigitalOcean", "Git", "REST APIs"],
-            "other":      ["Full-stack debugging", "IT systems support", "Technical documentation"],
-        },
-        "experience": [
-            {
-                "title":    "Web Applications Developer",
-                "company":  "CNBS Accounting Officers",
-                "location": "Pretoria, South Africa",
-                "period":   "May 2024 – June 2025",
-                "bullets":  [
-                    "Provided ongoing IT systems support for internal web applications.",
-                    "Diagnosed and resolved software defects across React/Django stack.",
-                    "Maintained production systems on DigitalOcean.",
-                    "Supported end users across accounting, marketing, and development teams.",
-                    "Developed and maintained web applications and databases.",
-                ],
-            },
-            {
-                "title":    "ICT Facilitator",
-                "company":  "Fountain Junior School",
-                "location": "Zimbabwe",
-                "period":   "February 2026 – April 2026",
-                "bullets":  [
-                    "Managed classroom computer equipment and troubleshot hardware/software issues.",
-                    "Delivered ICT support and training to staff and students.",
-                ],
-            },
-            {
-                "title":    "Laboratory Technician Assistant",
-                "company":  "Midlands State University",
-                "location": "Gweru, Zimbabwe",
-                "period":   "September 2019 – September 2020",
-                "bullets":  [
-                    "Provided technical support within a university laboratory.",
-                    "Maintained accurate records and ensured systems were operational.",
-                ],
-            },
-        ],
-        "education": [
-            {
-                "degree":      "BSc (Hons) Information Systems",
-                "grade":       "2.1",
-                "institution": "Midlands State University",
-                "location":    "Gweru, Zimbabwe",
-                "period":      "2017 – 2022",
-            },
-            {
-                "degree":      "National Certificate in Information Technology",
-                "grade":       None,
-                "institution": "Kwekwe Polytechnic",
-                "location":    "Kwekwe, Zimbabwe",
-                "period":      "2016",
-            },
-        ],
-        "certifications": [
-            "JPMorgan Chase Software Engineering Job Simulation · Forage · May 2026",
-            "Class 4 Driver's Licence",
-        ],
-        "references": [
-            {
-                "name":    "Mrs Chibwana",
-                "role":    "Director, Fountain Junior School",
-                "contact": "+263 77 321 9259 · Shamisochibwana1975@gmail.com",
-            },
-            {
-                "name":    "Mr Giyane",
-                "role":    "Chairperson, Computer Science Department, MSU",
-                "contact": "+263 715 134 137 · giyanem@staff.msu.ac.zw",
-            },
-            {
-                "name":    "Mr Phenyo Itumeleng",
-                "role":    "Senior Developer, CNBS Accounting Officers",
-                "contact": "+27 813 280 275 · phenyoitumeleng@gmail.com",
-            },
-        ],
-        "raw_text": "",
-    }
+    return dict(SAMPLE_CV_PROFILE)
 
 
 if __name__ == "__main__":

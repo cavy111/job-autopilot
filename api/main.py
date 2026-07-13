@@ -10,7 +10,7 @@ import sys, shutil
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from agents.tracker import init_db, get_all, get_stats, update_status
+from agents.tracker import init_db, get_all, get_stats, update_status, get_application
 from agents.status import read_status, reset_status
 
 app = FastAPI(title="Job Application Autopilot")
@@ -26,6 +26,7 @@ STATUS_COLORS = {
     "pending":     "#6c757d",
     "tailoring":   "#0dcaf0",
     "ready":       "#0d6efd",
+    "awaiting_approval": "#6f42c1",
     "sent":        "#ffc107",
     "followed_up": "#fd7e14",
     "interview":   "#198754",
@@ -89,4 +90,51 @@ async def run_pipeline():
     if cv:
         cmd += ["--cv", cv]
     subprocess.Popen(cmd)
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/approve-application")
+async def approve_application(job_url: str = Form(...)):
+    """Human-in-the-loop checkpoint: send a staged application only on approval."""
+    from agents.submission import send_application
+    from datetime import datetime, timedelta
+
+    app_row = get_application(job_url)
+    if not app_row:
+        return RedirectResponse("/?error=not_found", status_code=303)
+
+    contact_email = app_row.get("contact_email") or ""
+    if not contact_email:
+        update_status(job_url, "awaiting_approval",
+                      notes="Cannot send — no contact email on file")
+        return RedirectResponse("/?error=no_contact_email", status_code=303)
+
+    job = {
+        "title":   app_row.get("job_title", ""),
+        "company": app_row.get("company", ""),
+        "url":     app_row.get("job_url", ""),
+    }
+    sent = send_application(
+        cv_profile={},
+        job=job,
+        cv_path=app_row.get("cv_path") or "",
+        cover_letter_path=app_row.get("cover_letter_path") or "",
+        contact_email=contact_email,
+        subject=app_row.get("email_subject") or f"Application for {job['title']}",
+        dry_run=False,
+    )
+    if sent:
+        sent_at = datetime.now()
+        update_status(job_url, "sent", sent_at=sent_at,
+                      follow_up_at=sent_at + timedelta(days=7))
+    else:
+        update_status(job_url, "awaiting_approval",
+                      notes="Send failed — check Gmail credentials")
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/reject-application")
+async def reject_application(job_url: str = Form(...)):
+    """Discard a staged application without sending."""
+    update_status(job_url, "closed", notes="Rejected by user")
     return RedirectResponse("/", status_code=303)

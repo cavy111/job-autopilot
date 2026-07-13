@@ -151,6 +151,15 @@ def get_stats() -> dict:
     return stats
 
 
+def get_application(job_url: str) -> Optional[dict]:
+    """Return a single application row (as a dict) by URL, or None."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM applications WHERE job_url = ?", (job_url,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
 def already_tracked(job_url: str) -> bool:
     """Return True if this job URL is already in the database."""
     with get_connection() as conn:
@@ -199,7 +208,7 @@ if __name__ == "__main__":
         "sent",
         sent_at=sent_at,
         follow_up_at=follow_up_at,
-        email_subject="Application for Software Developer — Dube Calvin",
+        email_subject="Application for Software Developer — Jane Doe",
         contact_email="hr@techcorp.co.zw",
     )
 

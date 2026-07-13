@@ -1,7 +1,7 @@
 """
 agents/relevance_filter.py
 
-Scores job listings against Calvin's CV profile and decides whether to apply.
+Scores job listings against the candidate's CV profile and decides whether to apply.
 
 Two modes:
   Heuristic mode (default, no API needed):
@@ -27,6 +27,10 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 from dotenv import load_dotenv
+try:
+    from agents.llm_utils import parse_llm_json, call_llm_tool
+except ImportError:  # allow running this file standalone from agents/
+    from llm_utils import parse_llm_json, call_llm_tool
 
 load_dotenv()
 
@@ -42,11 +46,11 @@ REVIEW_THRESHOLD = 50   # flag for manual review between 50-69
 # below 50 = skip silently
 
 # ---------------------------------------------------------------------------
-# Calvin's keyword profile — used in heuristic mode
+# Candidate keyword profile — used in heuristic mode
 # Built from his actual CV so no API needed to filter obvious matches
 # ---------------------------------------------------------------------------
 
-CALVIN_SKILLS = {
+CANDIDATE_SKILLS = {
     "languages": [
         "python", "javascript", "php", "java", "html", "css", "html5", "css3"
     ],
@@ -155,7 +159,7 @@ class FilterResult:
 
 def _heuristic_score(job: dict) -> FilterResult:
     """
-    Score a job listing using keyword matching against Calvin's skill profile.
+    Score a job listing using keyword matching against the candidate's skill profile.
 
     job dict expected keys: title, company, location, description (optional),
     url, job_type, expires
@@ -191,10 +195,10 @@ def _heuristic_score(job: dict) -> FilterResult:
 
     # 2. Skill keyword matching in description (30 points max)
     all_skills = (
-        CALVIN_SKILLS["languages"]
-        + CALVIN_SKILLS["frameworks"]
-        + CALVIN_SKILLS["databases"]
-        + CALVIN_SKILLS["devops"]
+        CANDIDATE_SKILLS["languages"]
+        + CANDIDATE_SKILLS["frameworks"]
+        + CANDIDATE_SKILLS["databases"]
+        + CANDIDATE_SKILLS["devops"]
     )
     skill_hits = []
     for skill in all_skills:
@@ -209,7 +213,7 @@ def _heuristic_score(job: dict) -> FilterResult:
 
     # 3. Domain keyword matching (20 points max)
     domain_hits = []
-    for domain in CALVIN_SKILLS["domains"]:
+    for domain in CANDIDATE_SKILLS["domains"]:
         if domain in text:
             domain_hits.append(domain)
     domain_score = min(20, len(domain_hits) * 10)
@@ -296,6 +300,27 @@ Rules:
 """
 
 
+SCORE_JOB_TOOL = {
+    "name": "record_job_match",
+    "description": "Record the structured assessment of how well the candidate matches this job.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "score": {"type": "integer", "minimum": 0, "maximum": 100,
+                       "description": "Overall match score, 0-100."},
+            "decision": {"type": "string", "enum": ["APPLY", "REVIEW", "SKIP"],
+                          "description": "APPLY if score>=70, REVIEW if 50-69, SKIP if <50."},
+            "matched_keywords": {"type": "array", "items": {"type": "string"},
+                                  "description": "Skills/keywords that matched."},
+            "red_flags": {"type": "array", "items": {"type": "string"},
+                           "description": "Concerns or mismatches."},
+            "reasoning": {"type": "string", "description": "2-3 sentence explanation."},
+        },
+        "required": ["score", "decision", "reasoning"],
+    },
+}
+
+
 def _llm_score(job: dict, cv_profile: dict) -> FilterResult:
     """Score a job listing using Qwen LLM for semantic matching."""
     try:
@@ -343,24 +368,17 @@ Description: {(job.get('description') or 'Not available')[:800]}
 
     user_message = f"CANDIDATE:\n{candidate_summary}\n\nJOB:\n{job_text}"
 
-    response = client.chat.completions.create(
-        model="qwen3.5-plus",
+    result = call_llm_tool(
+        client,
+        model="qwen-plus",
         messages=[
             {"role": "system", "content": LLM_SYSTEM_PROMPT},
             {"role": "user", "content": user_message},
         ],
+        tool=SCORE_JOB_TOOL,
         temperature=0.1,
         max_tokens=500,
     )
-
-    raw = response.choices[0].message.content.strip()
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    raw = raw.strip()
-
-    result = json.loads(raw)
     score = int(result.get("score", 0))
 
     return FilterResult(
@@ -382,7 +400,7 @@ Description: {(job.get('description') or 'Not available')[:800]}
 
 def filter_job(job: dict, cv_profile: Optional[dict] = None) -> FilterResult:
     """
-    Score a single job listing against Calvin's CV.
+    Score a single job listing against the candidate's CV.
 
     Args:
         job:        JobListing dict from the scraper (must have title, url, company)
