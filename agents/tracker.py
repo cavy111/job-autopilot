@@ -73,13 +73,15 @@ def upsert_job(job: dict, relevance_score: int = 0) -> int:
         return cursor.lastrowid
 
 
-def update_status(job_url: str, status: str, **kwargs):
+def update_status(job_url: str, status: str, **kwargs) -> bool:
     """
     Update the status of an application and any additional fields.
 
     Usage:
         update_status(url, "ready", cv_path="output/cvs/CV_...", cover_letter_path="...")
         update_status(url, "sent",  sent_at=datetime.now(), follow_up_at=..., email_subject="...")
+
+    Returns True if a row was actually updated, False if job_url isn't tracked.
     """
     allowed_fields = {
         "cv_path", "cover_letter_path", "contact_email",
@@ -96,8 +98,14 @@ def update_status(job_url: str, status: str, **kwargs):
     updates["job_url"] = job_url
 
     with get_connection() as conn:
-        conn.execute(sql, updates)
-    logger.info(f"Updated [{status}]: {job_url}")
+        cursor = conn.execute(sql, updates)
+        updated = cursor.rowcount > 0
+
+    if updated:
+        logger.info(f"Updated [{status}]: {job_url}")
+    else:
+        logger.warning(f"update_status: no tracked application for {job_url}")
+    return updated
 
 
 # ---------------------------------------------------------------------------

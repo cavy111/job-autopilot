@@ -77,7 +77,8 @@ async def upload_cv(cv_file: UploadFile = File(...)):
 
 @app.post("/update-status")
 async def update(job_url: str = Form(...), status: str = Form(...)):
-    update_status(job_url, status)
+    if not update_status(job_url, status):
+        return RedirectResponse("/?error=not_found", status_code=303)
     return RedirectResponse("/", status_code=303)
 
 
@@ -136,5 +137,6 @@ async def approve_application(job_url: str = Form(...)):
 @app.post("/reject-application")
 async def reject_application(job_url: str = Form(...)):
     """Discard a staged application without sending."""
-    update_status(job_url, "closed", notes="Rejected by user")
+    if not update_status(job_url, "closed", notes="Rejected by user"):
+        return RedirectResponse("/?error=not_found", status_code=303)
     return RedirectResponse("/", status_code=303)
