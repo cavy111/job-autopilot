@@ -173,6 +173,22 @@ This means the full pipeline can be tested and iterated without spending any API
 
 ---
 
+## Extensibility
+
+The pipeline is **source-agnostic by design**. Each job source is an adapter under
+`scrapers/` that produces a normalized `JobListing` (`title`, `company`, `location`,
+`url`, `description`, `contact_email`, `source`, …). Every downstream stage — relevance
+scoring, CV tailoring, cover-letter generation, human approval, submission, and tracking —
+consumes that schema and is **completely independent of where the job came from**.
+
+Adding a new job board therefore means writing **one adapter** — no changes to the
+pipeline. See `scrapers/cvpeople.py` for a documented adapter template describing the
+contract, and `scrapers/vacancymail.py` for the reference implementation.
+
+- **Current reference integration:** `vacancymail.co.zw` (live, end-to-end).
+- **Roadmap:** additional boards (e.g. cvpeople.africa), user-supplied job URLs/descriptions,
+  and a form/ATS submission channel alongside the current email channel.
+
 ## Dashboard
 
 The FastAPI dashboard at `http://localhost:8000` shows:
