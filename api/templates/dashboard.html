@@ -140,6 +140,7 @@
     {% elif error == 'no_contact_email' %}Can't send — no contact email on file for that application.
     {% elif error == 'no_cv' %}Upload a CV first, then add a job.
     {% elif error == 'empty_job' %}Paste a job URL or description before submitting.
+    {% elif error == 'thin_job' %}That doesn't look like a full job posting — paste the actual description or a link, not just a phrase.
     {% else %}Something went wrong ({{ error }}).
     {% endif %}
   </div>
@@ -209,12 +210,13 @@
   <div class="cv-card" style="display:block;">
     <h3>➕ Add a job yourself</h3>
     <p style="color:#888; font-size:0.85rem; margin:4px 0 8px;">
-      Paste a job link or the full job description. Qwen extracts the details and runs it
-      through the same score → tailor → approve flow.
+      Paste a <strong>real</strong> job posting — its full description text or a link to it
+      (any job board or company careers page). Qwen extracts the details and runs it through
+      the same score → tailor → approve flow. This won't find or invent a job for you.
     </p>
     <form method="post" action="/add-job">
       <textarea name="job_input" rows="3" required
-                placeholder="https://example.com/jobs/backend-developer   —or—   paste the job description text here"
+                placeholder="Paste a job link (e.g. https://…/jobs/backend-developer) — or — the full job description you copied from a posting"
                 style="width:100%; box-sizing:border-box; padding:8px; border:1px solid #ccc; border-radius:6px; font-family:inherit; font-size:0.9rem;"></textarea>
       <button class="btn btn-primary" type="submit" style="margin-top:8px;"
               {% if not active_cv %}disabled title="Upload a CV first"{% endif %}>

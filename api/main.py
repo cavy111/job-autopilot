@@ -108,6 +108,11 @@ async def add_job(job_input: str = Form("")):
     text = (job_input or "").strip()
     if not text:
         return RedirectResponse("/?error=empty_job", status_code=303)
+
+    is_url = text.lower().startswith(("http://", "https://")) and " " not in text and "\n" not in text
+    if not is_url and len(text) < 40:
+        return RedirectResponse("/?error=thin_job", status_code=303)
+
     cv = get_active_cv()
     if not cv:
         return RedirectResponse("/?error=no_cv", status_code=303)

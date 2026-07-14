@@ -203,6 +203,16 @@ def step_followups(dry_run: bool = True):
 
 # ── Entry point ─────────────────────────────────────────────────────────────
 
+def _looks_thin(job: dict) -> bool:
+    """A user-supplied 'job' that has no company, no contact email, and only a
+    scrap of description almost certainly isn't a real posting (e.g. someone
+    typed 'a high paying job'). Don't waste tailoring/LLM calls on it."""
+    has_company = bool((job.get("company") or "").strip())
+    has_email   = bool((job.get("contact_email") or "").strip())
+    desc        = (job.get("description") or "").strip()
+    return not has_company and not has_email and len(desc) < 60
+
+
 def step_intake_manual(raw_input: str, cv_profile: dict, auto_send: bool = False):
     """Process a single user-supplied job (URL or pasted text) through the same
     score -> tailor -> cover letter -> human-approval pipeline as scraped jobs."""
@@ -214,6 +224,13 @@ def step_intake_manual(raw_input: str, cv_profile: dict, auto_send: bool = False
     write_status("intake", "Reading the job you added...", 20)
     job = intake_job(raw_input)
     logger.info(f"── Manual intake: {job['title']} @ {job['company'] or 'unknown source'} ──")
+
+    if _looks_thin(job):
+        msg = ("That doesn't look like a full job posting — paste the actual job "
+               "description or a link to it, not just a phrase.")
+        logger.warning(f"Rejected thin manual input: {msg}")
+        write_status("error", msg, 0)
+        return
 
     write_status("scoring", "Scoring the job against your CV...", 50)
     result = filter_job(job, cv_profile)
