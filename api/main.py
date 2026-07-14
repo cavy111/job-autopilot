@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from agents.tracker import init_db, get_all, get_stats, update_status, get_application
 from agents.status import read_status, reset_status
+from scrapers.vacancymail import CATEGORIES, CATEGORY_LABELS
 
 app = FastAPI(title="Job Application Autopilot")
 templates = Jinja2Templates(directory="api/templates")
@@ -21,6 +22,8 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 CV_POINTER = Path("active_cv.txt")
 
 init_db()
+
+CATEGORY_CHOICES = [(k, CATEGORY_LABELS.get(k, k)) for k in CATEGORIES]
 
 STATUS_COLORS = {
     "pending":     "#6c757d",
@@ -53,7 +56,7 @@ async def dashboard(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
-        context={"apps": apps, "stats": stats, "active_cv": cv},
+        context={"apps": apps, "stats": stats, "active_cv": cv, "categories": CATEGORY_CHOICES},
     )
 
 
@@ -83,13 +86,16 @@ async def update(job_url: str = Form(...), status: str = Form(...)):
 
 
 @app.post("/run-pipeline")
-async def run_pipeline():
+async def run_pipeline(category: str = Form("ict")):
     import subprocess
     reset_status()
     cv = get_active_cv()
+    if category not in CATEGORIES:
+        category = "ict"
     cmd = [sys.executable, "main.py"]
     if cv:
         cmd += ["--cv", cv]
+    cmd += ["--categories", category]
     subprocess.Popen(cmd)
     return RedirectResponse("/", status_code=303)
 

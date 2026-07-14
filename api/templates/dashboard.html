@@ -196,7 +196,15 @@
 
   <!-- Actions -->
   <div class="actions">
-    <form method="post" action="/run-pipeline" id="runPipelineForm">
+    <form method="post" action="/run-pipeline" id="runPipelineForm" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+      <label style="font-size:0.88rem; color:#555;">
+        Search category:
+        <select name="category" style="padding:6px 8px; border:1px solid #ccc; border-radius:6px; font-family:inherit; font-size:0.88rem;">
+          {% for key, label in categories %}
+          <option value="{{ key }}"{% if key == 'ict' %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
       <button class="btn btn-primary" type="submit" id="runPipelineBtn" {% if not active_cv %}disabled title="Upload a CV first"{% endif %}>
         ▶ Run Pipeline Now
       </button>

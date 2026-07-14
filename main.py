@@ -59,7 +59,7 @@ CV_POINTER = Path("active_cv.txt")
 
 # ── Pipeline steps ──────────────────────────────────────────────────────────
 
-def step_scrape() -> list[dict]:
+def step_scrape(categories=None) -> list[dict]:
     """Step 1 — Scrape fresh job listings from vacancymail, skipping detail
     fetches for jobs we've already tracked (major speed improvement)."""
     from scrapers.vacancymail import scrape
@@ -72,7 +72,7 @@ def step_scrape() -> list[dict]:
     tracked_urls = {app["job_url"] for app in get_all()}
 
     jobs = scrape(
-        categories=SCRAPE_CATEGORIES,
+        categories=categories or SCRAPE_CATEGORIES,
         max_pages=SCRAPE_MAX_PAGES,
         fetch_details=FETCH_DETAILS,
         skip_urls=tracked_urls,
@@ -251,6 +251,7 @@ def main():
     parser.add_argument("--followups-only", action="store_true", help="Only run follow-up check")
     parser.add_argument("--scrape-only",    action="store_true", help="Only scrape and score, no documents")
     parser.add_argument("--add-job-file",   type=str,            help="Process one user-supplied job (a file containing a URL or pasted description)")
+    parser.add_argument("--categories",     type=str,            help="Comma-separated category keys to scrape (default: ict)")
     args = parser.parse_args()
 
     dry_run = not args.send
@@ -299,8 +300,12 @@ def main():
             step_intake_manual(raw, cv_profile, auto_send=args.send)
             return
 
-        # Scrape
-        jobs = step_scrape()
+        # Scrape (category selectable from the dashboard / --categories)
+        selected_categories = (
+            [c.strip() for c in args.categories.split(",") if c.strip()]
+            if args.categories else SCRAPE_CATEGORIES
+        )
+        jobs = step_scrape(categories=selected_categories)
         if not jobs:
             write_status("done", "No jobs scraped this run.", 100)
             logger.info("No jobs scraped — exiting")

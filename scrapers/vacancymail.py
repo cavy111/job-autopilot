@@ -45,8 +45,34 @@ BASE_URL = "https://vacancymail.co.zw"
 
 # Category URLs to scrape — add more as needed
 CATEGORIES = {
-    "ict": "/categories/ict-computer-jobs-in-zimbabwe/",
-    "engineering": "/categories/science-engineering-jobs-in-zimbabwe/",
+    "ict":                   "/categories/ict-computer-jobs-in-zimbabwe/",
+    "engineering":           "/categories/engineering-jobs-in-zimbabwe/",
+    "accounting-finance":    "/categories/accounting-finance-jobs-in-zimbabwe/",
+    "sales-marketing":       "/categories/sales-marketing-jobs-in-zimbabwe/",
+    "admin-office":          "/categories/admin-office-jobs-in-zimbabwe/",
+    "banking":               "/categories/banking-jobs-in-zimbabwe/",
+    "healthcare":            "/categories/healthcare-jobs-in-zimbabwe/",
+    "education":             "/categories/education-teaching-jobs-in-zimbabwe/",
+    "human-resources":       "/categories/human-resources-jobs-in-zimbabwe/",
+    "ngo":                   "/categories/ngo-social-services-jobs-in-zimbabwe/",
+    "graduate-trainee":      "/categories/graduate-trainee-jobs-in-zimbabwe/",
+    "attachment-internship": "/categories/attachment-internship-jobs-in-zimbabwe/",
+}
+
+# Human-readable labels for the dashboard dropdown (keys must match CATEGORIES)
+CATEGORY_LABELS = {
+    "ict":                   "ICT & Computer",
+    "engineering":           "Engineering",
+    "accounting-finance":    "Accounting & Finance",
+    "sales-marketing":       "Sales & Marketing",
+    "admin-office":          "Admin & Office",
+    "banking":               "Banking",
+    "healthcare":            "Healthcare & Pharmacy",
+    "education":             "Education & Teaching",
+    "human-resources":       "Human Resources",
+    "ngo":                   "NGO & Social Services",
+    "graduate-trainee":      "Graduate Trainee",
+    "attachment-internship": "Attachment & Internship",
 }
 
 REQUEST_DELAY = 2.0  # seconds between requests — be polite
