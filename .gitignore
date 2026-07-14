@@ -16,3 +16,4 @@ active_cv.txt
 uploads/
 output/
 pipeline_status.json
+pending_job.txt

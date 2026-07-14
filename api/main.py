@@ -94,6 +94,35 @@ async def run_pipeline():
     return RedirectResponse("/", status_code=303)
 
 
+# statuses for which a job is already handled — don't re-run the pipeline on resubmit
+ACTIVE_STATUSES = {"tailoring", "awaiting_approval", "ready", "sent", "followed_up", "interview"}
+
+
+@app.post("/add-job")
+async def add_job(job_input: str = Form("")):
+    """Queue a single user-supplied job (a URL or a pasted description) to run
+    through the same score -> tailor -> approve pipeline as scraped jobs."""
+    import subprocess
+    from agents.job_intake import job_key
+
+    text = (job_input or "").strip()
+    if not text:
+        return RedirectResponse("/?error=empty_job", status_code=303)
+    cv = get_active_cv()
+    if not cv:
+        return RedirectResponse("/?error=no_cv", status_code=303)
+
+    # Debounce: if this exact URL/text is already staged or sent, don't re-tailor.
+    existing = get_application(job_key(text))
+    if existing and existing.get("status") in ACTIVE_STATUSES:
+        return RedirectResponse("/?msg=already_added", status_code=303)
+
+    Path("pending_job.txt").write_text(text, encoding="utf-8")
+    reset_status()
+    subprocess.Popen([sys.executable, "main.py", "--add-job-file", "pending_job.txt", "--cv", cv])
+    return RedirectResponse("/", status_code=303)
+
+
 @app.post("/approve-application")
 async def approve_application(job_url: str = Form(...)):
     """Human-in-the-loop checkpoint: send a staged application only on approval."""

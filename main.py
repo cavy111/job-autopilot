@@ -203,6 +203,28 @@ def step_followups(dry_run: bool = True):
 
 # ── Entry point ─────────────────────────────────────────────────────────────
 
+def step_intake_manual(raw_input: str, cv_profile: dict, auto_send: bool = False):
+    """Process a single user-supplied job (URL or pasted text) through the same
+    score -> tailor -> cover letter -> human-approval pipeline as scraped jobs."""
+    from agents.job_intake import intake_job
+    from agents.relevance_filter import filter_job
+    from agents.tracker import upsert_job
+    from agents.status import write_status
+
+    write_status("intake", "Reading the job you added...", 20)
+    job = intake_job(raw_input)
+    logger.info(f"── Manual intake: {job['title']} @ {job['company'] or 'unknown source'} ──")
+
+    write_status("scoring", "Scoring the job against your CV...", 50)
+    result = filter_job(job, cv_profile)
+    upsert_job(job, relevance_score=result.score)
+    logger.info(f"Scored {result.score}/100 ({result.decision})")
+
+    # The user explicitly added this job, so always prepare it for approval.
+    step_apply([(job, result)], cv_profile, auto_send=auto_send)
+    write_status("done", f"Job added and staged for approval (score {result.score}/100).", 100)
+
+
 def main():
     from agents.status import write_status
 
@@ -211,6 +233,7 @@ def main():
     parser.add_argument("--send",           action="store_true", help="Auto-approve and send (default: stage for human approval in the dashboard)")
     parser.add_argument("--followups-only", action="store_true", help="Only run follow-up check")
     parser.add_argument("--scrape-only",    action="store_true", help="Only scrape and score, no documents")
+    parser.add_argument("--add-job-file",   type=str,            help="Process one user-supplied job (a file containing a URL or pasted description)")
     args = parser.parse_args()
 
     dry_run = not args.send
@@ -252,6 +275,12 @@ def main():
         else:
             logger.warning("QWEN_API_KEY not set — using hardcoded CV profile")
             cv_profile = _hardcoded_cv_profile()
+
+        # Manual single-job intake (user pasted a URL or job description)
+        if args.add_job_file:
+            raw = Path(args.add_job_file).read_text(encoding="utf-8")
+            step_intake_manual(raw, cv_profile, auto_send=args.send)
+            return
 
         # Scrape
         jobs = step_scrape()

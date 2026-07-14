@@ -138,8 +138,17 @@
     {% if error == 'invalid_file_type' %}Please upload a .docx or .pdf file.
     {% elif error == 'not_found' %}That application couldn't be found — it may have already been removed.
     {% elif error == 'no_contact_email' %}Can't send — no contact email on file for that application.
+    {% elif error == 'no_cv' %}Upload a CV first, then add a job.
+    {% elif error == 'empty_job' %}Paste a job URL or description before submitting.
     {% else %}Something went wrong ({{ error }}).
     {% endif %}
+  </div>
+  {% endif %}
+
+  {% set msg = request.query_params.get('msg') %}
+  {% if msg == 'already_added' %}
+  <div class="error-notice" style="background:#e7f1ff; border-color:#0d6efd; color:#084298;">
+    ℹ This job is already in your list — skipped re-processing to save API calls.
   </div>
   {% endif %}
 
@@ -196,6 +205,24 @@
     </span>
   </div>
 
+  <!-- Add your own job -->
+  <div class="cv-card" style="display:block;">
+    <h3>➕ Add a job yourself</h3>
+    <p style="color:#888; font-size:0.85rem; margin:4px 0 8px;">
+      Paste a job link or the full job description. Qwen extracts the details and runs it
+      through the same score → tailor → approve flow.
+    </p>
+    <form method="post" action="/add-job">
+      <textarea name="job_input" rows="3" required
+                placeholder="https://example.com/jobs/backend-developer   —or—   paste the job description text here"
+                style="width:100%; box-sizing:border-box; padding:8px; border:1px solid #ccc; border-radius:6px; font-family:inherit; font-size:0.9rem;"></textarea>
+      <button class="btn btn-primary" type="submit" style="margin-top:8px;"
+              {% if not active_cv %}disabled title="Upload a CV first"{% endif %}>
+        Add &amp; process job
+      </button>
+    </form>
+  </div>
+
   <!-- Table -->
   <div class="table-wrap">
     {% if apps %}
@@ -209,9 +236,14 @@
         {% for app in apps %}
         <tr>
           <td>
+            {% if app.job_url.startswith('http') %}
             <a href="{{ app.job_url }}" target="_blank" style="color:#1A5276; text-decoration:none; font-weight:600;">
               {{ app.job_title[:45] }}{% if app.job_title|length > 45 %}…{% endif %}
             </a>
+            {% else %}
+            <span style="color:#1A5276; font-weight:600;">{{ app.job_title[:45] }}{% if app.job_title|length > 45 %}…{% endif %}</span>
+            <span title="Added manually" style="color:#6f42c1; font-size:0.7rem; border:1px solid #6f42c1; border-radius:4px; padding:0 4px; margin-left:4px;">manual</span>
+            {% endif %}
           </td>
           <td style="color:#555;">{{ app.company }}</td>
           <td>
