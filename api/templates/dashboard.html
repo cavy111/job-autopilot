@@ -91,14 +91,15 @@
 
     .table-wrap {
       background: white; border-radius: 10px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow: hidden;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      overflow-x: auto; overflow-y: hidden;
     }
     table { width: 100%; border-collapse: collapse; }
     thead { background: #1A5276; color: white; }
-    thead th { padding: 12px 14px; text-align: left; font-size: 0.82rem; font-weight: 600; letter-spacing: 0.4px; }
+    thead th { padding: 12px 10px; text-align: left; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; }
     tbody tr { border-bottom: 1px solid #f0f0f0; transition: background 0.1s; }
     tbody tr:hover { background: #f8fafc; }
-    tbody td { padding: 11px 14px; font-size: 0.87rem; vertical-align: middle; }
+    tbody td { padding: 11px 10px; font-size: 0.87rem; vertical-align: middle; }
 
     .badge {
       display: inline-block; padding: 3px 10px; border-radius: 12px;
@@ -113,8 +114,8 @@
 
     .update-form { display: flex; gap: 5px; align-items: center; }
     .update-form select {
-      padding: 3px 6px; border: 1px solid #dee2e6; border-radius: 4px;
-      font-size: 0.78rem; font-family: Arial, sans-serif;
+      width: 108px; padding: 3px 4px; border: 1px solid #dee2e6; border-radius: 4px;
+      font-size: 0.74rem; font-family: Arial, sans-serif;
     }
 
     .empty { text-align: center; padding: 48px; color: #999; font-size: 0.95rem; }
