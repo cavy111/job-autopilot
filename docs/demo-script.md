@@ -50,8 +50,8 @@ So the live run can't fail or stall on camera:
 > each job against my actual CV** — using function-calling, so every score, matched skill, and red
 > flag comes back as clean structured data. High-fit jobs get a tailored CV and cover letter
 > generated automatically."
-**On screen:** click a job to show the score bar + status `awaiting_approval`, open the generated
-`.docx` CV/cover letter briefly.
+**On screen:** point to a row showing the score bar and `awaiting_approval` status, then click
+**📄 CV** / **✉ Letter** to open the generated documents right from the dashboard.
 
 ### 1:20–1:50 — Human-in-the-loop (the differentiator)
 **On screen:** the `awaiting_approval` row; hover the **Approve & Send / Reject** buttons.

@@ -3,7 +3,7 @@ api/main.py — FastAPI Dashboard
 """
 
 from fastapi import FastAPI, Request, Form, UploadFile, File, Depends, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pathlib import Path
@@ -48,6 +48,7 @@ templates = Jinja2Templates(directory="api/templates")
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 CV_POINTER = Path("active_cv.txt")
+OUTPUT_ROOT = Path("output").resolve()
 
 init_db()
 
@@ -92,6 +93,33 @@ async def dashboard(request: Request):
 async def pipeline_status():
     """Polled by the dashboard's JS every couple seconds."""
     return JSONResponse(read_status())
+
+
+@app.get("/download")
+async def download_document(job_url: str, doc: str):
+    """Serve a generated CV or cover letter .docx for a tracked application.
+    Only ever serves files whose path came from that application's own DB row
+    (not arbitrary user input), and only from within output/, as defense in
+    depth against path traversal."""
+    if doc not in ("cv", "cover_letter"):
+        raise HTTPException(status_code=400, detail="doc must be 'cv' or 'cover_letter'")
+
+    app_row = get_application(job_url)
+    if not app_row:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    path_str = app_row.get("cv_path" if doc == "cv" else "cover_letter_path")
+    if not path_str:
+        raise HTTPException(status_code=404, detail="Document not generated yet")
+
+    path = Path(path_str).resolve()
+    if not path.is_relative_to(OUTPUT_ROOT) or not path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return FileResponse(
+        path, filename=path.name,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
 
 
 @app.post("/upload-cv")

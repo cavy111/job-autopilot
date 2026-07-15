@@ -240,7 +240,7 @@
     <table>
       <thead>
         <tr>
-          <th>Role</th><th>Company</th><th>Score</th><th>Status</th><th>Expires</th><th>Sent</th><th>Action</th><th>Update</th>
+          <th>Role</th><th>Company</th><th>Score</th><th>Status</th><th>Expires</th><th>Sent</th><th>Docs</th><th>Action</th><th>Update</th>
         </tr>
       </thead>
       <tbody>
@@ -266,6 +266,19 @@
           <td><span class="badge" style="background:{{ app.status_color }}">{{ app.status }}</span></td>
           <td style="color:#888; font-size:0.82rem;">{{ app.expires or '—' }}</td>
           <td style="color:#888; font-size:0.82rem;">{{ app.sent_at[:10] if app.sent_at else '—' }}</td>
+          <td style="white-space:nowrap;">
+            {% if app.cv_path %}
+            <a href="/download?job_url={{ app.job_url | urlencode }}&doc=cv" target="_blank"
+               title="Open tailored CV" style="font-size:0.78rem; text-decoration:none;">📄 CV</a>
+            {% endif %}
+            {% if app.cover_letter_path %}
+            <a href="/download?job_url={{ app.job_url | urlencode }}&doc=cover_letter" target="_blank"
+               title="Open cover letter" style="font-size:0.78rem; text-decoration:none;">✉ Letter</a>
+            {% endif %}
+            {% if not app.cv_path and not app.cover_letter_path %}
+            <span style="color:#bbb;">—</span>
+            {% endif %}
+          </td>
           <td>
             {% if app.status == 'awaiting_approval' %}
             <form method="post" action="/approve-application" style="display:inline;">
