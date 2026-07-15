@@ -226,6 +226,23 @@ The FastAPI dashboard at `http://localhost:8000` shows:
 
 ---
 
+## Deployment & Alibaba Cloud
+
+The backend is deployed on **Alibaba Cloud ECS** (Ubuntu 22.04, Singapore region), served by
+Uvicorn under a `systemd` service. All AI reasoning runs on **Qwen via Alibaba Cloud Model
+Studio (DashScope)**.
+
+**Proof of Alibaba Cloud usage (code):** every LLM agent calls Qwen through the Alibaba Cloud
+DashScope endpoint — see [`agents/relevance_filter.py`](agents/relevance_filter.py), which uses
+`base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1"` (the same pattern is in
+`cv_parser.py`, `cv_tailor.py`, and `cover_letter.py`).
+
+A live, password-protected instance and its login credentials are provided in the submission's
+testing instructions. See [docs/deploy-alibaba-cloud.md](docs/deploy-alibaba-cloud.md) for the
+full deployment runbook.
+
+---
+
 ## Documentation
 
 - [Architecture](docs/architecture.md) — system diagram and component-by-component breakdown
