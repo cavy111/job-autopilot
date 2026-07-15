@@ -2,11 +2,15 @@
 api/main.py — FastAPI Dashboard
 """
 
-from fastapi import FastAPI, Request, Form, UploadFile, File
+from fastapi import FastAPI, Request, Form, UploadFile, File, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pathlib import Path
-import sys, shutil
+import os, sys, shutil, secrets
+
+from dotenv import load_dotenv
+load_dotenv()
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -14,7 +18,31 @@ from agents.tracker import init_db, get_all, get_stats, update_status, get_appli
 from agents.status import read_status, reset_status
 from scrapers.vacancymail import CATEGORIES, CATEGORY_LABELS
 
-app = FastAPI(title="Job Application Autopilot")
+# ── Optional dashboard login (enabled only when DASH_USER and DASH_PASS are set) ──
+# Protects the public deployment: no login vars = open (local dev); vars set = required.
+_DASH_USER = os.getenv("DASH_USER")
+_DASH_PASS = os.getenv("DASH_PASS")
+_basic = HTTPBasic(auto_error=False)
+
+
+def require_auth(credentials: HTTPBasicCredentials = Depends(_basic)):
+    if not (_DASH_USER and _DASH_PASS):
+        return  # auth disabled when credentials aren't configured
+    unauth = HTTPException(
+        status_code=401, detail="Not authenticated",
+        headers={"WWW-Authenticate": "Basic"},
+    )
+    if credentials is None:
+        raise unauth
+    ok = (
+        secrets.compare_digest(credentials.username, _DASH_USER)
+        and secrets.compare_digest(credentials.password, _DASH_PASS)
+    )
+    if not ok:
+        raise unauth
+
+
+app = FastAPI(title="Job Application Autopilot", dependencies=[Depends(require_auth)])
 templates = Jinja2Templates(directory="api/templates")
 
 UPLOAD_DIR = Path("uploads")
